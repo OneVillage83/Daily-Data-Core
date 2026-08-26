@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from daily_data_core.temporal import require_aware
 from daily_data_core.venues import GeoPoint, haversine_miles
+
+
+def _zone(name: str, label: str) -> ZoneInfo:
+    if not name.strip():
+        raise ValueError(f"{label} cannot be blank")
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"{label} is not a known timezone") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,8 +34,8 @@ class TravelSegment:
         require_aware(self.arrived_at, "arrived_at")
         if self.arrived_at < self.departed_at:
             raise ValueError("arrived_at cannot precede departed_at")
-        if not self.origin_timezone.strip() or not self.destination_timezone.strip():
-            raise ValueError("timezone names cannot be blank")
+        _zone(self.origin_timezone, "origin_timezone")
+        _zone(self.destination_timezone, "destination_timezone")
 
     @property
     def distance_miles(self) -> float:
@@ -43,19 +53,42 @@ class RecoveryContext:
     timezone_shift_hours: float
     travel_elapsed_hours: float
 
+    def __post_init__(self) -> None:
+        for value, label in (
+            (self.exact_rest_hours, "exact_rest_hours"),
+            (self.travel_distance_miles, "travel_distance_miles"),
+            (self.timezone_shift_hours, "timezone_shift_hours"),
+            (self.travel_elapsed_hours, "travel_elapsed_hours"),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"{label} must be finite")
+        if self.exact_rest_hours < 0:
+            raise ValueError("exact_rest_hours cannot be negative")
+        if self.travel_distance_miles < 0:
+            raise ValueError("travel_distance_miles cannot be negative")
+        if self.travel_elapsed_hours < 0:
+            raise ValueError("travel_elapsed_hours cannot be negative")
+
 
 def timezone_shift_hours(
-    origin_timezone: str, destination_timezone: str, at: datetime
+    origin_timezone: str,
+    destination_timezone: str,
+    at: datetime,
 ) -> float:
     require_aware(at, "at")
-    origin_offset = at.astimezone(ZoneInfo(origin_timezone)).utcoffset()
-    destination_offset = at.astimezone(ZoneInfo(destination_timezone)).utcoffset()
+    origin_offset = at.astimezone(_zone(origin_timezone, "origin_timezone")).utcoffset()
+    destination_offset = at.astimezone(
+        _zone(destination_timezone, "destination_timezone")
+    ).utcoffset()
     if origin_offset is None or destination_offset is None:
         raise ValueError("timezone offset unavailable")
     return (destination_offset - origin_offset).total_seconds() / 3600.0
 
 
-def exact_rest_hours(previous_event_end: datetime, next_event_start: datetime) -> float:
+def exact_rest_hours(
+    previous_event_end: datetime,
+    next_event_start: datetime,
+) -> float:
     require_aware(previous_event_end, "previous_event_end")
     require_aware(next_event_start, "next_event_start")
     if next_event_start < previous_event_end:
@@ -78,7 +111,9 @@ def build_recovery_context(
             travel_elapsed_hours=0.0,
         )
     shift = timezone_shift_hours(
-        segment.origin_timezone, segment.destination_timezone, segment.arrived_at
+        segment.origin_timezone,
+        segment.destination_timezone,
+        segment.arrived_at,
     )
     return RecoveryContext(
         exact_rest_hours=rest,
