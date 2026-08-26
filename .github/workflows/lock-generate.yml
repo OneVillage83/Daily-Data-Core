@@ -49,7 +49,7 @@ jobs:
       - name: Commit locks
         shell: bash
         run: |
-          if git diff --quiet -- requirements.txt requirements-dev.txt; then
+          if [[ -z "$(git status --porcelain -- requirements.txt requirements-dev.txt)" ]]; then
             echo "Dependency locks already current."
             exit 0
           fi
