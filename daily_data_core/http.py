@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from typing import Protocol, runtime_checkable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
@@ -36,6 +37,17 @@ class JsonHttpResult:
     content_type: str
     response_url: str
     diagnostics: HttpRequestDiagnostics
+
+
+@runtime_checkable
+class JsonHttpClient(Protocol):
+    def get_json(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JsonHttpResult: ...
 
 
 class HttpError(RuntimeError):
