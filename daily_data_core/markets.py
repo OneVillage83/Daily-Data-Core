@@ -61,7 +61,9 @@ def american_to_probability(price: float) -> float:
     return abs(normalized) / (abs(normalized) + 100.0)
 
 
-def proportional_no_vig_from_american(prices: tuple[float, ...]) -> tuple[float, ...]:
+def proportional_no_vig_from_american(
+    prices: tuple[float, ...],
+) -> tuple[float, ...]:
     """Remove vig by proportional normalization for a 2+-outcome market."""
 
     if len(prices) < 2:
@@ -74,7 +76,8 @@ def proportional_no_vig_from_american(prices: tuple[float, ...]) -> tuple[float,
 
 
 def no_vig_probabilities(
-    first_probability: float, second_probability: float
+    first_probability: float,
+    second_probability: float,
 ) -> tuple[float, float]:
     if first_probability <= 0 or second_probability <= 0:
         raise ValueError("probabilities must be positive")
@@ -84,13 +87,18 @@ def no_vig_probabilities(
     return first_probability / total, second_probability / total
 
 
-def no_vig_from_american(first_price: float, second_price: float) -> tuple[float, float]:
+def no_vig_from_american(
+    first_price: float,
+    second_price: float,
+) -> tuple[float, float]:
     normalized = proportional_no_vig_from_american((first_price, second_price))
     return normalized[0], normalized[1]
 
 
 def calculate_hold(first_price: float, second_price: float) -> float:
-    return american_to_probability(first_price) + american_to_probability(second_price) - 1.0
+    first_probability = american_to_probability(first_price)
+    second_probability = american_to_probability(second_price)
+    return first_probability + second_probability - 1.0
 
 
 def best_american_price(prices: tuple[float, ...]) -> float:
@@ -166,13 +174,18 @@ def consensus_two_way(
     second_name = offers[0].second_side
     line = offers[0].line
     if any(
-        offer.first_side != first_name or offer.second_side != second_name or offer.line != line
+        (
+            offer.first_side != first_name
+            or offer.second_side != second_name
+            or offer.line != line
+        )
         for offer in offers
     ):
         raise ValueError("consensus offers must describe the same ordered sides and line")
 
     fair_first = [
-        no_vig_from_american(offer.first_price, offer.second_price)[0] for offer in offers
+        no_vig_from_american(offer.first_price, offer.second_price)[0]
+        for offer in offers
     ]
     first_mean = fmean(fair_first)
     count = len(offers)
