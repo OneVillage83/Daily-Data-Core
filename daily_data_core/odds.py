@@ -1,0 +1,231 @@
+"""Shared The Odds API adapter and normalized sportsbook snapshots."""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import cast
+
+from daily_data_core.http import HttpClient, HttpRequestDiagnostics
+from daily_data_core.providers import ProviderPayload
+from daily_data_core.temporal import TemporalProvenance
+
+THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
+PROVIDER_ID = "the_odds_api"
+PARSER_VERSION = "ddc-the-odds-api-v1"
+
+# Provider keys verified against The Odds API V4 sports catalogue.
+SPORT_KEYS: dict[str, str] = {
+    "MLB": "baseball_mlb",
+    "NFL": "americanfootball_nfl",
+    "NCAAF": "americanfootball_ncaaf",
+    "NBA": "basketball_nba",
+    "NCAAB": "basketball_ncaab",
+    "WNBA": "basketball_wnba",
+    "NHL": "icehockey_nhl",
+    "MLS": "soccer_usa_mls",
+}
+
+
+class OddsProviderSchemaError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class OddsOutcomeSnapshot:
+    name: str
+    price: float
+    point: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OddsMarketSnapshot:
+    key: str
+    outcomes: tuple[OddsOutcomeSnapshot, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BookmakerSnapshot:
+    key: str
+    title: str
+    provider_updated_at: datetime | None
+    markets: tuple[OddsMarketSnapshot, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OddsEventSnapshot:
+    provider_event_id: str
+    sport_key: str
+    commence_time: datetime
+    home_participant: str
+    away_participant: str
+    bookmakers: tuple[BookmakerSnapshot, ...]
+    observed_at: datetime
+    available_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class OddsCollectionResult:
+    events: tuple[OddsEventSnapshot, ...]
+    raw_payload: ProviderPayload
+    diagnostics: HttpRequestDiagnostics
+    quota: dict[str, str | None]
+
+
+def provider_sport_key(sport: str) -> str:
+    key = sport.strip().upper()
+    try:
+        return SPORT_KEYS[key]
+    except KeyError as exc:
+        raise ValueError(f"unsupported configured sport {sport!r}") from exc
+
+
+def _object(value: object, label: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise OddsProviderSchemaError(f"{label} must be an object")
+    return cast(dict[str, object], value)
+
+
+def _list(value: object, label: str) -> list[object]:
+    if not isinstance(value, list):
+        raise OddsProviderSchemaError(f"{label} must be a list")
+    return cast(list[object], value)
+
+
+def _string(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise OddsProviderSchemaError(f"{label} must be a nonblank string")
+    return value
+
+
+def _number(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise OddsProviderSchemaError(f"{label} must be numeric")
+    result = float(value)
+    if not math.isfinite(result):
+        raise OddsProviderSchemaError(f"{label} must be finite")
+    return result
+
+
+def _optional_number(value: object, label: str) -> float | None:
+    if value is None:
+        return None
+    return _number(value, label)
+
+
+def _timestamp(value: object, label: str) -> datetime:
+    source = _string(value, label)
+    try:
+        parsed = datetime.fromisoformat(source.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise OddsProviderSchemaError(f"{label} must be ISO-8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise OddsProviderSchemaError(f"{label} must be timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _optional_timestamp(value: object, label: str) -> datetime | None:
+    if value is None:
+        return None
+    return _timestamp(value, label)
+
+
+def _parse_event(raw: object, observed_at: datetime) -> OddsEventSnapshot:
+    event = _object(raw, "event")
+    bookmaker_items = _list(event.get("bookmakers"), "event.bookmakers")
+    bookmakers: list[BookmakerSnapshot] = []
+    for bookmaker_raw in bookmaker_items:
+        bookmaker = _object(bookmaker_raw, "bookmaker")
+        market_items = _list(bookmaker.get("markets"), "bookmaker.markets")
+        markets: list[OddsMarketSnapshot] = []
+        for market_raw in market_items:
+            market = _object(market_raw, "market")
+            outcomes: list[OddsOutcomeSnapshot] = []
+            for outcome_raw in _list(market.get("outcomes"), "market.outcomes"):
+                outcome = _object(outcome_raw, "outcome")
+                outcomes.append(
+                    OddsOutcomeSnapshot(
+                        name=_string(outcome.get("name"), "outcome.name"),
+                        price=_number(outcome.get("price"), "outcome.price"),
+                        point=_optional_number(outcome.get("point"), "outcome.point"),
+                    )
+                )
+            markets.append(
+                OddsMarketSnapshot(
+                    key=_string(market.get("key"), "market.key"), outcomes=tuple(outcomes)
+                )
+            )
+        bookmakers.append(
+            BookmakerSnapshot(
+                key=_string(bookmaker.get("key"), "bookmaker.key"),
+                title=_string(bookmaker.get("title"), "bookmaker.title"),
+                provider_updated_at=_optional_timestamp(
+                    bookmaker.get("last_update"), "bookmaker.last_update"
+                ),
+                markets=tuple(markets),
+            )
+        )
+    return OddsEventSnapshot(
+        provider_event_id=_string(event.get("id"), "event.id"),
+        sport_key=_string(event.get("sport_key"), "event.sport_key"),
+        commence_time=_timestamp(event.get("commence_time"), "event.commence_time"),
+        home_participant=_string(event.get("home_team"), "event.home_team"),
+        away_participant=_string(event.get("away_team"), "event.away_team"),
+        bookmakers=tuple(bookmakers),
+        observed_at=observed_at,
+        available_at=observed_at,
+    )
+
+
+class TheOddsApiClient:
+    def __init__(self, http: HttpClient) -> None:
+        self.http = http
+
+    def collect(
+        self,
+        *,
+        sport_key: str,
+        api_key: str,
+        regions: tuple[str, ...] = ("us",),
+        markets: tuple[str, ...] = ("h2h", "spreads", "totals"),
+    ) -> OddsCollectionResult:
+        if not sport_key.strip():
+            raise ValueError("sport_key cannot be blank")
+        if not api_key.strip():
+            raise ValueError("api_key cannot be blank")
+        if not regions or any(not region.strip() for region in regions):
+            raise ValueError("regions must contain nonblank values")
+        supported_markets = {"h2h", "spreads", "totals"}
+        if not markets or any(market not in supported_markets for market in markets):
+            raise ValueError("markets must be a nonempty subset of h2h, spreads, totals")
+        if len(regions) != len(set(regions)) or len(markets) != len(set(markets)):
+            raise ValueError("regions and markets cannot contain duplicates")
+
+        result = self.http.get_json(
+            f"{THE_ODDS_API_BASE}/{sport_key}/odds/",
+            params={
+                "apiKey": api_key,
+                "regions": ",".join(regions),
+                "markets": ",".join(markets),
+                "oddsFormat": "american",
+                "dateFormat": "iso",
+            },
+        )
+        if not isinstance(result.payload, list):
+            raise OddsProviderSchemaError("The Odds API odds root must be a list")
+        observed_at = datetime.now(timezone.utc)
+        events = tuple(_parse_event(item, observed_at) for item in result.payload)
+        raw_payload = ProviderPayload(
+            content=result.content,
+            content_type=result.content_type,
+            source_uri=result.response_url,
+            provenance=TemporalProvenance(observed_at=observed_at, available_at=observed_at),
+            provider_schema_version="v4",
+        )
+        return OddsCollectionResult(
+            events=events,
+            raw_payload=raw_payload,
+            diagnostics=result.diagnostics,
+            quota=result.diagnostics.quota_headers,
+        )

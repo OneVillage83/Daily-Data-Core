@@ -1,0 +1,288 @@
+"""Shared weather forecast acquisition and comparison."""
+
+from __future__ import annotations
+
+import math
+import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import cast
+
+from daily_data_core.http import HttpClient
+from daily_data_core.providers import ProviderPayload
+from daily_data_core.temporal import TemporalProvenance, require_aware
+
+CARDINAL_DEGREES: dict[str, float] = {
+    "N": 0.0,
+    "NNE": 22.5,
+    "NE": 45.0,
+    "ENE": 67.5,
+    "E": 90.0,
+    "ESE": 112.5,
+    "SE": 135.0,
+    "SSE": 157.5,
+    "S": 180.0,
+    "SSW": 202.5,
+    "SW": 225.0,
+    "WSW": 247.5,
+    "W": 270.0,
+    "WNW": 292.5,
+    "NW": 315.0,
+    "NNW": 337.5,
+}
+
+
+class WeatherProviderSchemaError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastSnapshot:
+    provider_id: str
+    forecast_time: datetime
+    observed_at: datetime
+    available_at: datetime
+    provider_updated_at: datetime | None
+    temperature_f: float | None
+    humidity_pct: float | None
+    precipitation_probability_pct: float | None
+    wind_speed_mph: float | None
+    wind_direction_deg: float | None
+    short_forecast: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WeatherAcquisitionResult:
+    forecast: ForecastSnapshot
+    raw_payloads: tuple[ProviderPayload, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class WeatherComparison:
+    agreement: str
+    temperature_difference_f: float | None
+    precipitation_difference_points: float | None
+    wind_speed_difference_mph: float | None
+
+
+def parse_wind_speed(text: str | None) -> float | None:
+    if not text:
+        return None
+    numbers = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not numbers:
+        return None
+    return sum(numbers[:2]) / min(len(numbers), 2)
+
+
+def _timestamp(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise WeatherProviderSchemaError(f"{label} must be a timestamp string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise WeatherProviderSchemaError(f"{label} must be ISO-8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise WeatherProviderSchemaError(f"{label} must be timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _object(value: object, label: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise WeatherProviderSchemaError(f"{label} must be an object")
+    return cast(dict[str, object], value)
+
+
+def _list(value: object, label: str) -> list[object]:
+    if not isinstance(value, list):
+        raise WeatherProviderSchemaError(f"{label} must be a list")
+    return cast(list[object], value)
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    result = float(value)
+    return result if math.isfinite(result) else None
+
+
+def _nested_value(container: object) -> float | None:
+    if not isinstance(container, dict):
+        return None
+    return _optional_float(cast(dict[str, object], container).get("value"))
+
+
+def _raw_payload(result_content: bytes, content_type: str, source_uri: str, observed_at: datetime) -> ProviderPayload:
+    return ProviderPayload(
+        content=result_content,
+        content_type=content_type,
+        source_uri=source_uri,
+        provenance=TemporalProvenance(observed_at=observed_at, available_at=observed_at),
+    )
+
+
+class NwsWeatherClient:
+    def __init__(self, http: HttpClient, user_agent: str) -> None:
+        if not user_agent.strip():
+            raise ValueError("NWS user_agent cannot be blank")
+        self.http = http
+        self.headers = {"User-Agent": user_agent, "Accept": "application/geo+json"}
+
+    def collect(self, latitude: float, longitude: float, target_time: datetime) -> WeatherAcquisitionResult:
+        require_aware(target_time, "target_time")
+        point_result = self.http.get_json(
+            f"https://api.weather.gov/points/{latitude:.4f},{longitude:.4f}",
+            headers=self.headers,
+        )
+        point_observed_at = datetime.now(timezone.utc)
+        point = _object(point_result.payload, "NWS point response")
+        point_properties = _object(point.get("properties"), "NWS point properties")
+        forecast_url = point_properties.get("forecastHourly")
+        if not isinstance(forecast_url, str) or not forecast_url:
+            raise WeatherProviderSchemaError("NWS point response missing forecastHourly")
+
+        forecast_result = self.http.get_json(forecast_url, headers=self.headers)
+        forecast_observed_at = datetime.now(timezone.utc)
+        forecast = _object(forecast_result.payload, "NWS forecast response")
+        properties = _object(forecast.get("properties"), "NWS forecast properties")
+        periods = [_object(item, "NWS period") for item in _list(properties.get("periods"), "NWS periods")]
+        if not periods:
+            raise WeatherProviderSchemaError("NWS hourly forecast contains no periods")
+
+        target_utc = target_time.astimezone(timezone.utc)
+        selected = min(
+            periods,
+            key=lambda period: abs(
+                (_timestamp(period.get("startTime"), "period.startTime") - target_utc).total_seconds()
+            ),
+        )
+        direction = selected.get("windDirection")
+        short_forecast = selected.get("shortForecast")
+        provider_updated_at = None
+        updated = properties.get("updated")
+        if isinstance(updated, str) and updated.strip():
+            provider_updated_at = _timestamp(updated, "forecast.updated")
+        temperature = _optional_float(selected.get("temperature"))
+        if selected.get("temperatureUnit") != "F":
+            temperature = None
+
+        snapshot = ForecastSnapshot(
+            provider_id="nws",
+            forecast_time=_timestamp(selected.get("startTime"), "period.startTime"),
+            observed_at=forecast_observed_at,
+            available_at=forecast_observed_at,
+            provider_updated_at=provider_updated_at,
+            temperature_f=temperature,
+            humidity_pct=_nested_value(selected.get("relativeHumidity")),
+            precipitation_probability_pct=_nested_value(selected.get("probabilityOfPrecipitation")),
+            wind_speed_mph=parse_wind_speed(
+                selected.get("windSpeed") if isinstance(selected.get("windSpeed"), str) else None
+            ),
+            wind_direction_deg=CARDINAL_DEGREES.get(direction) if isinstance(direction, str) else None,
+            short_forecast=short_forecast if isinstance(short_forecast, str) else None,
+        )
+        return WeatherAcquisitionResult(
+            forecast=snapshot,
+            raw_payloads=(
+                _raw_payload(
+                    point_result.content,
+                    point_result.content_type,
+                    point_result.response_url,
+                    point_observed_at,
+                ),
+                _raw_payload(
+                    forecast_result.content,
+                    forecast_result.content_type,
+                    forecast_result.response_url,
+                    forecast_observed_at,
+                ),
+            ),
+        )
+
+
+class OpenWeatherClient:
+    def __init__(self, http: HttpClient) -> None:
+        self.http = http
+
+    def collect(
+        self, latitude: float, longitude: float, target_time: datetime, api_key: str
+    ) -> WeatherAcquisitionResult:
+        require_aware(target_time, "target_time")
+        if not api_key.strip():
+            raise ValueError("OpenWeather api_key cannot be blank")
+        result = self.http.get_json(
+            "https://api.openweathermap.org/data/3.0/onecall",
+            params={
+                "lat": str(latitude),
+                "lon": str(longitude),
+                "appid": api_key,
+                "units": "imperial",
+                "exclude": "minutely,daily,alerts",
+            },
+        )
+        observed_at = datetime.now(timezone.utc)
+        root = _object(result.payload, "OpenWeather response")
+        hourly = [_object(item, "OpenWeather hourly item") for item in _list(root.get("hourly"), "OpenWeather hourly")]
+        if not hourly:
+            raise WeatherProviderSchemaError("OpenWeather response contains no hourly forecasts")
+        target_epoch = target_time.astimezone(timezone.utc).timestamp()
+        selected = min(
+            hourly,
+            key=lambda item: abs((_optional_float(item.get("dt")) or 0.0) - target_epoch),
+        )
+        epoch = _optional_float(selected.get("dt"))
+        if epoch is None:
+            raise WeatherProviderSchemaError("OpenWeather hourly item missing dt")
+        pop = _optional_float(selected.get("pop"))
+        short_forecast = None
+        weather_items = selected.get("weather")
+        if isinstance(weather_items, list) and weather_items:
+            first = weather_items[0]
+            if isinstance(first, dict):
+                description = cast(dict[str, object], first).get("description")
+                short_forecast = description if isinstance(description, str) else None
+        snapshot = ForecastSnapshot(
+            provider_id="openweather",
+            forecast_time=datetime.fromtimestamp(epoch, tz=timezone.utc),
+            observed_at=observed_at,
+            available_at=observed_at,
+            provider_updated_at=None,
+            temperature_f=_optional_float(selected.get("temp")),
+            humidity_pct=_optional_float(selected.get("humidity")),
+            precipitation_probability_pct=pop * 100.0 if pop is not None else None,
+            wind_speed_mph=_optional_float(selected.get("wind_speed")),
+            wind_direction_deg=_optional_float(selected.get("wind_deg")),
+            short_forecast=short_forecast,
+        )
+        return WeatherAcquisitionResult(
+            forecast=snapshot,
+            raw_payloads=(
+                _raw_payload(result.content, result.content_type, result.response_url, observed_at),
+            ),
+        )
+
+
+def compare_forecasts(first: ForecastSnapshot, second: ForecastSnapshot) -> WeatherComparison:
+    def delta(a: float | None, b: float | None) -> float | None:
+        if a is None or b is None:
+            return None
+        return abs(a - b)
+
+    temperature = delta(first.temperature_f, second.temperature_f)
+    precipitation = delta(
+        first.precipitation_probability_pct, second.precipitation_probability_pct
+    )
+    wind = delta(first.wind_speed_mph, second.wind_speed_mph)
+    disagreements = 0
+    if temperature is not None and temperature > 5.0:
+        disagreements += 1
+    if precipitation is not None and precipitation > 25.0:
+        disagreements += 1
+    if wind is not None and wind > 6.0:
+        disagreements += 1
+    agreement = "strong" if disagreements == 0 else "moderate" if disagreements == 1 else "weak"
+    return WeatherComparison(
+        agreement=agreement,
+        temperature_difference_f=temperature,
+        precipitation_difference_points=precipitation,
+        wind_speed_difference_mph=wind,
+    )
