@@ -100,7 +100,10 @@ class ForecastSnapshot:
                 raise ValueError(f"{label} must be in [0, 100]")
         if self.wind_speed_mph is not None and self.wind_speed_mph < 0:
             raise ValueError("wind_speed_mph cannot be negative")
-        if self.wind_direction_deg is not None and not 0.0 <= self.wind_direction_deg < 360.0:
+        if (
+            self.wind_direction_deg is not None
+            and not 0.0 <= self.wind_direction_deg < 360.0
+        ):
             raise ValueError("wind_direction_deg must be in [0, 360)")
         if self.pressure_hpa is not None and self.pressure_hpa <= 0:
             raise ValueError("pressure_hpa must be positive when present")
@@ -108,7 +111,10 @@ class ForecastSnapshot:
             raise ValueError("short_forecast cannot be blank when present")
 
         metadata_keys = [key for key, _ in self.source_metadata]
-        if any(not key.strip() or not value.strip() for key, value in self.source_metadata):
+        if any(
+            not key.strip() or not value.strip()
+            for key, value in self.source_metadata
+        ):
             raise ValueError("source_metadata keys and values must be nonblank")
         if len(metadata_keys) != len(set(metadata_keys)):
             raise ValueError("source_metadata keys must be unique")
@@ -116,7 +122,14 @@ class ForecastSnapshot:
     def metadata_value(self, key: str) -> str | None:
         """Return one provider-specific metadata value without exposing mutability."""
 
-        return next((value for metadata_key, value in self.source_metadata if metadata_key == key), None)
+        return next(
+            (
+                value
+                for metadata_key, value in self.source_metadata
+                if metadata_key == key
+            ),
+            None,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +202,10 @@ def _raw_payload(
         content=result_content,
         content_type=content_type,
         source_uri=source_uri,
-        provenance=TemporalProvenance(observed_at=observed_at, available_at=observed_at),
+        provenance=TemporalProvenance(
+            observed_at=observed_at,
+            available_at=observed_at,
+        ),
     )
 
 
@@ -324,11 +340,15 @@ class OpenWeatherClient:
             for item in _list(root.get("hourly"), "OpenWeather hourly")
         ]
         if not hourly:
-            raise WeatherProviderSchemaError("OpenWeather response contains no hourly forecasts")
+            raise WeatherProviderSchemaError(
+                "OpenWeather response contains no hourly forecasts"
+            )
         target_epoch = target_time.astimezone(timezone.utc).timestamp()
         selected = min(
             hourly,
-            key=lambda item: abs((_optional_float(item.get("dt")) or 0.0) - target_epoch),
+            key=lambda item: abs(
+                (_optional_float(item.get("dt")) or 0.0) - target_epoch
+            ),
         )
         epoch = _optional_float(selected.get("dt"))
         if epoch is None:
@@ -359,7 +379,12 @@ class OpenWeatherClient:
         return WeatherAcquisitionResult(
             forecast=snapshot,
             raw_payloads=(
-                _raw_payload(result.content, result.content_type, result.response_url, observed_at),
+                _raw_payload(
+                    result.content,
+                    result.content_type,
+                    result.response_url,
+                    observed_at,
+                ),
             ),
         )
 
@@ -383,7 +408,12 @@ def compare_forecasts(first: ForecastSnapshot, second: ForecastSnapshot) -> Weat
         disagreements += 1
     if wind is not None and wind > 6.0:
         disagreements += 1
-    agreement = "strong" if disagreements == 0 else "moderate" if disagreements == 1 else "weak"
+    if disagreements == 0:
+        agreement = "strong"
+    elif disagreements == 1:
+        agreement = "moderate"
+    else:
+        agreement = "weak"
     return WeatherComparison(
         agreement=agreement,
         temperature_difference_f=temperature,
