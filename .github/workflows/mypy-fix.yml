@@ -1,0 +1,52 @@
+name: Mypy Weather Fix (temporary)
+
+on:
+  push:
+    branches:
+      - feature/ddc-core-bootstrap
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[mypy-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Apply targeted weather typing fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("daily_data_core/weather.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              """        for value, label in (\n            (self.forecast_time, \"forecast_time\"),\n            (self.observed_at, \"observed_at\"),\n            (self.available_at, \"available_at\"),\n            (self.provider_updated_at, \"provider_updated_at\"),\n        ):\n            if value is not None:\n                require_aware(value, label)\n""",
+              """        for timestamp_value, label in (\n            (self.forecast_time, \"forecast_time\"),\n            (self.observed_at, \"observed_at\"),\n            (self.available_at, \"available_at\"),\n            (self.provider_updated_at, \"provider_updated_at\"),\n        ):\n            if timestamp_value is not None:\n                require_aware(timestamp_value, label)\n""",
+          )
+          text = text.replace(
+              """        for value, label in (\n            (self.temperature_f, \"temperature_f\"),\n            (self.humidity_pct, \"humidity_pct\"),\n            (self.precipitation_probability_pct, \"precipitation_probability_pct\"),\n            (self.wind_speed_mph, \"wind_speed_mph\"),\n            (self.wind_direction_deg, \"wind_direction_deg\"),\n            (self.cloud_cover_pct, \"cloud_cover_pct\"),\n            (self.pressure_hpa, \"pressure_hpa\"),\n        ):\n            _validate_optional_finite(value, label)\n""",
+              """        for numeric_value, label in (\n            (self.temperature_f, \"temperature_f\"),\n            (self.humidity_pct, \"humidity_pct\"),\n            (self.precipitation_probability_pct, \"precipitation_probability_pct\"),\n            (self.wind_speed_mph, \"wind_speed_mph\"),\n            (self.wind_direction_deg, \"wind_direction_deg\"),\n            (self.cloud_cover_pct, \"cloud_cover_pct\"),\n            (self.pressure_hpa, \"pressure_hpa\"),\n        ):\n            _validate_optional_finite(numeric_value, label)\n""",
+          )
+          text = text.replace(
+              """        for value, label in (\n            (self.humidity_pct, \"humidity_pct\"),\n            (self.precipitation_probability_pct, \"precipitation_probability_pct\"),\n            (self.cloud_cover_pct, \"cloud_cover_pct\"),\n        ):\n            if value is not None and not 0.0 <= value <= 100.0:\n                raise ValueError(f\"{label} must be in [0, 100]\")\n""",
+              """        for percentage_value, label in (\n            (self.humidity_pct, \"humidity_pct\"),\n            (self.precipitation_probability_pct, \"precipitation_probability_pct\"),\n            (self.cloud_cover_pct, \"cloud_cover_pct\"),\n        ):\n            if percentage_value is not None and not 0.0 <= percentage_value <= 100.0:\n                raise ValueError(f\"{label} must be in [0, 100]\")\n""",
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit targeted fix
+        shell: bash
+        run: |
+          if git diff --quiet -- daily_data_core/weather.py; then
+            echo "No typing change produced."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- daily_data_core/weather.py
+          git commit -m "[mypy-fix] Separate weather validation loop types"
+          git push origin HEAD:feature/ddc-core-bootstrap
