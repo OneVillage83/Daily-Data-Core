@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 import pytest
 import requests
 
 import daily_data_core.http as http_module
-from daily_data_core.http import HttpClient, HttpError, RetryableHttpError
+from daily_data_core.http import HttpClient, HttpError
 
 SECRET = "ddc-http-secret"
 
@@ -139,7 +139,8 @@ def test_permanent_http_error_is_not_retried_and_redacts_secret_url(
     assert len(session.calls) == 1
     assert sleeps == []
     assert SECRET not in str(captured.value)
-    assert "%5BREDACTED%5D" in str(captured.value) or "[REDACTED]" in str(captured.value)
+    message = str(captured.value)
+    assert "%5BREDACTED%5D" in message or "[REDACTED]" in message
     assert captured.value.diagnostics is not None
     assert captured.value.diagnostics.quota_headers["requests_remaining"] == "88"
 
