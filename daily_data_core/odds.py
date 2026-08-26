@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 from daily_data_core.http import HttpClient, HttpRequestDiagnostics
+from daily_data_core.markets import TwoWayOffer
 from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import TemporalProvenance
 
@@ -30,6 +31,15 @@ SPORT_KEYS: dict[str, str] = {
 
 class OddsProviderSchemaError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class OddsCollectionWarning:
+    code: str
+    message: str
+    event_id: str | None = None
+    bookmaker_key: str | None = None
+    market_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +81,7 @@ class OddsCollectionResult:
     raw_payload: ProviderPayload
     diagnostics: HttpRequestDiagnostics
     quota: dict[str, str | None]
+    warnings: tuple[OddsCollectionWarning, ...] = ()
 
 
 def provider_sport_key(sport: str) -> str:
@@ -131,51 +142,183 @@ def _optional_timestamp(value: object, label: str) -> datetime | None:
     return _timestamp(value, label)
 
 
-def _parse_event(raw: object, observed_at: datetime) -> OddsEventSnapshot:
-    event = _object(raw, "event")
-    bookmaker_items = _list(event.get("bookmakers"), "event.bookmakers")
-    bookmakers: list[BookmakerSnapshot] = []
-    for bookmaker_raw in bookmaker_items:
-        bookmaker = _object(bookmaker_raw, "bookmaker")
-        market_items = _list(bookmaker.get("markets"), "bookmaker.markets")
-        markets: list[OddsMarketSnapshot] = []
-        for market_raw in market_items:
-            market = _object(market_raw, "market")
-            outcomes: list[OddsOutcomeSnapshot] = []
-            for outcome_raw in _list(market.get("outcomes"), "market.outcomes"):
-                outcome = _object(outcome_raw, "outcome")
-                outcomes.append(
-                    OddsOutcomeSnapshot(
-                        name=_string(outcome.get("name"), "outcome.name"),
-                        price=_number(outcome.get("price"), "outcome.price"),
-                        point=_optional_number(outcome.get("point"), "outcome.point"),
-                    )
-                )
-            markets.append(
-                OddsMarketSnapshot(
-                    key=_string(market.get("key"), "market.key"), outcomes=tuple(outcomes)
-                )
-            )
-        bookmakers.append(
-            BookmakerSnapshot(
-                key=_string(bookmaker.get("key"), "bookmaker.key"),
-                title=_string(bookmaker.get("title"), "bookmaker.title"),
-                provider_updated_at=_optional_timestamp(
-                    bookmaker.get("last_update"), "bookmaker.last_update"
-                ),
-                markets=tuple(markets),
+def _parse_market(
+    raw: object,
+    *,
+    event_id: str,
+    bookmaker_key: str,
+    warnings: list[OddsCollectionWarning],
+) -> OddsMarketSnapshot | None:
+    try:
+        market = _object(raw, "market")
+        market_key = _string(market.get("key"), "market.key")
+        outcome_items = _list(market.get("outcomes"), "market.outcomes")
+    except OddsProviderSchemaError as exc:
+        warnings.append(
+            OddsCollectionWarning(
+                "malformed_market", str(exc), event_id=event_id, bookmaker_key=bookmaker_key
             )
         )
+        return None
+
+    outcomes: list[OddsOutcomeSnapshot] = []
+    for raw_outcome in outcome_items:
+        try:
+            outcome = _object(raw_outcome, "outcome")
+            outcomes.append(
+                OddsOutcomeSnapshot(
+                    name=_string(outcome.get("name"), "outcome.name"),
+                    price=_number(outcome.get("price"), "outcome.price"),
+                    point=_optional_number(outcome.get("point"), "outcome.point"),
+                )
+            )
+        except OddsProviderSchemaError as exc:
+            warnings.append(
+                OddsCollectionWarning(
+                    "malformed_outcome",
+                    str(exc),
+                    event_id=event_id,
+                    bookmaker_key=bookmaker_key,
+                    market_key=market_key,
+                )
+            )
+    if not outcomes:
+        return None
+    return OddsMarketSnapshot(key=market_key, outcomes=tuple(outcomes))
+
+
+def _parse_bookmaker(
+    raw: object,
+    *,
+    event_id: str,
+    warnings: list[OddsCollectionWarning],
+) -> BookmakerSnapshot | None:
+    try:
+        bookmaker = _object(raw, "bookmaker")
+        bookmaker_key = _string(bookmaker.get("key"), "bookmaker.key")
+        title = _string(bookmaker.get("title"), "bookmaker.title")
+        provider_updated_at = _optional_timestamp(
+            bookmaker.get("last_update"), "bookmaker.last_update"
+        )
+        market_items = _list(bookmaker.get("markets"), "bookmaker.markets")
+    except OddsProviderSchemaError as exc:
+        warnings.append(OddsCollectionWarning("malformed_bookmaker", str(exc), event_id=event_id))
+        return None
+
+    markets = tuple(
+        parsed
+        for item in market_items
+        if (
+            parsed := _parse_market(
+                item,
+                event_id=event_id,
+                bookmaker_key=bookmaker_key,
+                warnings=warnings,
+            )
+        )
+        is not None
+    )
+    if not markets:
+        return None
+    return BookmakerSnapshot(
+        key=bookmaker_key,
+        title=title,
+        provider_updated_at=provider_updated_at,
+        markets=markets,
+    )
+
+
+def _parse_event(
+    raw: object,
+    observed_at: datetime,
+    warnings: list[OddsCollectionWarning],
+) -> OddsEventSnapshot | None:
+    try:
+        event = _object(raw, "event")
+        event_id = _string(event.get("id"), "event.id")
+        sport_key = _string(event.get("sport_key"), "event.sport_key")
+        commence_time = _timestamp(event.get("commence_time"), "event.commence_time")
+        home = _string(event.get("home_team"), "event.home_team")
+        away = _string(event.get("away_team"), "event.away_team")
+        bookmaker_items = _list(event.get("bookmakers"), "event.bookmakers")
+    except OddsProviderSchemaError as exc:
+        warnings.append(OddsCollectionWarning("malformed_event", str(exc)))
+        return None
+
+    bookmakers = tuple(
+        parsed
+        for item in bookmaker_items
+        if (parsed := _parse_bookmaker(item, event_id=event_id, warnings=warnings)) is not None
+    )
     return OddsEventSnapshot(
-        provider_event_id=_string(event.get("id"), "event.id"),
-        sport_key=_string(event.get("sport_key"), "event.sport_key"),
-        commence_time=_timestamp(event.get("commence_time"), "event.commence_time"),
-        home_participant=_string(event.get("home_team"), "event.home_team"),
-        away_participant=_string(event.get("away_team"), "event.away_team"),
-        bookmakers=tuple(bookmakers),
+        provider_event_id=event_id,
+        sport_key=sport_key,
+        commence_time=commence_time,
+        home_participant=home,
+        away_participant=away,
+        bookmakers=bookmakers,
         observed_at=observed_at,
         available_at=observed_at,
     )
+
+
+def group_two_way_offers(
+    event: OddsEventSnapshot,
+    market_key: str,
+) -> dict[float | None, tuple[TwoWayOffer, ...]]:
+    """Build line-aware two-way offers using raw provider participant strings."""
+
+    grouped: dict[float | None, list[TwoWayOffer]] = {}
+    for bookmaker in event.bookmakers:
+        for market in bookmaker.markets:
+            if market.key != market_key:
+                continue
+            by_name = {outcome.name: outcome for outcome in market.outcomes}
+            line: float | None
+            first_name: str
+            second_name: str
+            if market_key == "h2h":
+                first_name = event.home_participant
+                second_name = event.away_participant
+                line = None
+            elif market_key == "spreads":
+                first_name = event.home_participant
+                second_name = event.away_participant
+                home = by_name.get(first_name)
+                away = by_name.get(second_name)
+                if home is None or away is None or home.point is None or away.point is None:
+                    continue
+                if not math.isclose(home.point, -away.point, abs_tol=1e-9):
+                    continue
+                line = 0.0 if home.point == 0 else home.point
+            elif market_key == "totals":
+                first_name = "Over"
+                second_name = "Under"
+                over = by_name.get(first_name)
+                under = by_name.get(second_name)
+                if over is None or under is None or over.point is None or under.point is None:
+                    continue
+                if not math.isclose(over.point, under.point, abs_tol=1e-9):
+                    continue
+                line = over.point
+            else:
+                raise ValueError(f"unsupported two-way market {market_key!r}")
+
+            first = by_name.get(first_name)
+            second = by_name.get(second_name)
+            if first is None or second is None:
+                continue
+            offer = TwoWayOffer(
+                bookmaker_key=bookmaker.key,
+                first_side=first_name,
+                second_side=second_name,
+                first_price=first.price,
+                second_price=second.price,
+                line=line,
+                provider_updated_at=bookmaker.provider_updated_at,
+            )
+            grouped.setdefault(line, []).append(offer)
+    return {line: tuple(offers) for line, offers in grouped.items()}
 
 
 class TheOddsApiClient:
@@ -215,7 +358,14 @@ class TheOddsApiClient:
         if not isinstance(result.payload, list):
             raise OddsProviderSchemaError("The Odds API odds root must be a list")
         observed_at = datetime.now(timezone.utc)
-        events = tuple(_parse_event(item, observed_at) for item in result.payload)
+        warnings: list[OddsCollectionWarning] = []
+        events = tuple(
+            parsed
+            for item in result.payload
+            if (parsed := _parse_event(item, observed_at, warnings)) is not None
+        )
+        if result.payload and not events:
+            raise OddsProviderSchemaError("The Odds API payload contained no structurally valid events")
         raw_payload = ProviderPayload(
             content=result.content,
             content_type=result.content_type,
@@ -228,4 +378,5 @@ class TheOddsApiClient:
             raw_payload=raw_payload,
             diagnostics=result.diagnostics,
             quota=result.diagnostics.quota_headers,
+            warnings=tuple(warnings),
         )

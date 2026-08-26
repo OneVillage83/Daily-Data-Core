@@ -1,8 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "daily-data-core"
 version = "0.1.0"
 description = "Shared sport-agnostic data foundation for The Daily Line"
 requires-python = ">=3.12,<3.13"
+dependencies = [
+    "requests==2.33.0",
+    "tzdata==2026.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["daily_data_core*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

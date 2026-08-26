@@ -61,7 +61,21 @@ def american_to_probability(price: float) -> float:
     return abs(normalized) / (abs(normalized) + 100.0)
 
 
-def no_vig_probabilities(first_probability: float, second_probability: float) -> tuple[float, float]:
+def proportional_no_vig_from_american(prices: tuple[float, ...]) -> tuple[float, ...]:
+    """Remove vig by proportional normalization for a 2+-outcome market."""
+
+    if len(prices) < 2:
+        raise ValueError("at least two prices are required")
+    implied = tuple(american_to_probability(price) for price in prices)
+    total = sum(implied)
+    if not math.isfinite(total) or total <= 0:
+        raise ValueError("implied-probability sum must be finite and positive")
+    return tuple(probability / total for probability in implied)
+
+
+def no_vig_probabilities(
+    first_probability: float, second_probability: float
+) -> tuple[float, float]:
     if first_probability <= 0 or second_probability <= 0:
         raise ValueError("probabilities must be positive")
     total = first_probability + second_probability
@@ -71,9 +85,8 @@ def no_vig_probabilities(first_probability: float, second_probability: float) ->
 
 
 def no_vig_from_american(first_price: float, second_price: float) -> tuple[float, float]:
-    return no_vig_probabilities(
-        american_to_probability(first_price), american_to_probability(second_price)
-    )
+    normalized = proportional_no_vig_from_american((first_price, second_price))
+    return normalized[0], normalized[1]
 
 
 def calculate_hold(first_price: float, second_price: float) -> float:
@@ -156,7 +169,9 @@ def consensus_two_way(
     ):
         raise ValueError("consensus offers must describe the same ordered sides and line")
 
-    fair_first = [no_vig_from_american(offer.first_price, offer.second_price)[0] for offer in offers]
+    fair_first = [
+        no_vig_from_american(offer.first_price, offer.second_price)[0] for offer in offers
+    ]
     first_mean = fmean(fair_first)
     count = len(offers)
     if count < thresholds.minimum_books:

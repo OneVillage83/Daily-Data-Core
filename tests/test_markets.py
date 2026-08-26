@@ -15,6 +15,7 @@ from daily_data_core.markets import (
     classify_freshness,
     consensus_two_way,
     no_vig_from_american,
+    proportional_no_vig_from_american,
 )
 
 
@@ -26,6 +27,12 @@ def test_american_odds_math() -> None:
     assert first == pytest.approx(0.5)
     assert second == pytest.approx(0.5)
     assert best_american_price((-120.0, -115.0, 105.0)) == 105.0
+
+
+def test_multi_outcome_proportional_no_vig() -> None:
+    fair = proportional_no_vig_from_american((150.0, 200.0, 250.0))
+    assert len(fair) == 3
+    assert sum(fair) == pytest.approx(1.0)
 
 
 def test_consensus_preserves_book_count_and_disagreement() -> None:
@@ -48,7 +55,16 @@ def test_consensus_preserves_book_count_and_disagreement() -> None:
 def test_freshness_classification() -> None:
     observed = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
     thresholds = FreshnessThresholds(fresh_seconds=120, stale_seconds=300)
-    assert classify_freshness(observed - timedelta(seconds=30), observed, thresholds) is FreshnessStatus.FRESH
-    assert classify_freshness(observed - timedelta(seconds=180), observed, thresholds) is FreshnessStatus.AGING
-    assert classify_freshness(observed - timedelta(seconds=600), observed, thresholds) is FreshnessStatus.STALE
+    assert (
+        classify_freshness(observed - timedelta(seconds=30), observed, thresholds)
+        is FreshnessStatus.FRESH
+    )
+    assert (
+        classify_freshness(observed - timedelta(seconds=180), observed, thresholds)
+        is FreshnessStatus.AGING
+    )
+    assert (
+        classify_freshness(observed - timedelta(seconds=600), observed, thresholds)
+        is FreshnessStatus.STALE
+    )
     assert classify_freshness(None, observed, thresholds) is FreshnessStatus.UNKNOWN

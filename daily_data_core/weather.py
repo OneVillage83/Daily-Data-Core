@@ -50,6 +50,30 @@ class ForecastSnapshot:
     wind_direction_deg: float | None
     short_forecast: str | None = None
 
+    def __post_init__(self) -> None:
+        if not self.provider_id.strip():
+            raise ValueError("provider_id cannot be blank")
+        for value, label in (
+            (self.forecast_time, "forecast_time"),
+            (self.observed_at, "observed_at"),
+            (self.available_at, "available_at"),
+            (self.provider_updated_at, "provider_updated_at"),
+        ):
+            if value is not None:
+                require_aware(value, label)
+        if self.available_at > self.observed_at:
+            raise ValueError("available_at cannot be later than observed_at")
+        for value, label in (
+            (self.humidity_pct, "humidity_pct"),
+            (self.precipitation_probability_pct, "precipitation_probability_pct"),
+        ):
+            if value is not None and not 0.0 <= value <= 100.0:
+                raise ValueError(f"{label} must be in [0, 100]")
+        if self.wind_speed_mph is not None and self.wind_speed_mph < 0:
+            raise ValueError("wind_speed_mph cannot be negative")
+        if self.wind_direction_deg is not None and not 0.0 <= self.wind_direction_deg < 360.0:
+            raise ValueError("wind_direction_deg must be in [0, 360)")
+
 
 @dataclass(frozen=True, slots=True)
 class WeatherAcquisitionResult:
@@ -111,7 +135,12 @@ def _nested_value(container: object) -> float | None:
     return _optional_float(cast(dict[str, object], container).get("value"))
 
 
-def _raw_payload(result_content: bytes, content_type: str, source_uri: str, observed_at: datetime) -> ProviderPayload:
+def _raw_payload(
+    result_content: bytes,
+    content_type: str,
+    source_uri: str,
+    observed_at: datetime,
+) -> ProviderPayload:
     return ProviderPayload(
         content=result_content,
         content_type=content_type,
@@ -127,7 +156,9 @@ class NwsWeatherClient:
         self.http = http
         self.headers = {"User-Agent": user_agent, "Accept": "application/geo+json"}
 
-    def collect(self, latitude: float, longitude: float, target_time: datetime) -> WeatherAcquisitionResult:
+    def collect(
+        self, latitude: float, longitude: float, target_time: datetime
+    ) -> WeatherAcquisitionResult:
         require_aware(target_time, "target_time")
         point_result = self.http.get_json(
             f"https://api.weather.gov/points/{latitude:.4f},{longitude:.4f}",
@@ -144,7 +175,10 @@ class NwsWeatherClient:
         forecast_observed_at = datetime.now(timezone.utc)
         forecast = _object(forecast_result.payload, "NWS forecast response")
         properties = _object(forecast.get("properties"), "NWS forecast properties")
-        periods = [_object(item, "NWS period") for item in _list(properties.get("periods"), "NWS periods")]
+        periods = [
+            _object(item, "NWS period")
+            for item in _list(properties.get("periods"), "NWS periods")
+        ]
         if not periods:
             raise WeatherProviderSchemaError("NWS hourly forecast contains no periods")
 
@@ -173,11 +207,15 @@ class NwsWeatherClient:
             provider_updated_at=provider_updated_at,
             temperature_f=temperature,
             humidity_pct=_nested_value(selected.get("relativeHumidity")),
-            precipitation_probability_pct=_nested_value(selected.get("probabilityOfPrecipitation")),
+            precipitation_probability_pct=_nested_value(
+                selected.get("probabilityOfPrecipitation")
+            ),
             wind_speed_mph=parse_wind_speed(
                 selected.get("windSpeed") if isinstance(selected.get("windSpeed"), str) else None
             ),
-            wind_direction_deg=CARDINAL_DEGREES.get(direction) if isinstance(direction, str) else None,
+            wind_direction_deg=(
+                CARDINAL_DEGREES.get(direction) if isinstance(direction, str) else None
+            ),
             short_forecast=short_forecast if isinstance(short_forecast, str) else None,
         )
         return WeatherAcquisitionResult(
@@ -221,7 +259,10 @@ class OpenWeatherClient:
         )
         observed_at = datetime.now(timezone.utc)
         root = _object(result.payload, "OpenWeather response")
-        hourly = [_object(item, "OpenWeather hourly item") for item in _list(root.get("hourly"), "OpenWeather hourly")]
+        hourly = [
+            _object(item, "OpenWeather hourly item")
+            for item in _list(root.get("hourly"), "OpenWeather hourly")
+        ]
         if not hourly:
             raise WeatherProviderSchemaError("OpenWeather response contains no hourly forecasts")
         target_epoch = target_time.astimezone(timezone.utc).timestamp()
