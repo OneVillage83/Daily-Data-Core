@@ -25,6 +25,9 @@ This file is the authoritative milestone certification record for Daily Data Cor
 ## Historical execution checkpoint
 Before the DDC-6 compatibility expansion, the initial DDC-1 through DDC-5 foundation compiled successfully and its then-current regression suite reported **14 passed**. That evidence is retained in `DDC_LOCAL_VALIDATION_20260826.md` but is not treated as final validation of the current branch.
 
+## Release gate
+No sport repo may use a moving Git branch as its production DDC dependency. After certification, DDC is versioned and distributed as an immutable wheel release with recorded source commit/SHA-256. Each consumer compiles that exact release into its normal hash lock. See `PACKAGE_RELEASE_POLICY.md`.
+
 ## DDC-6 transition rule
 DDC-6 may proceed through architecture documentation, compatibility fixture creation, baseline freezing, and side-by-side adapter preparation while core certification is pending. Daily-MLB must **not** delete or replace the legacy shared implementation as the sole production path until DDC-0 through DDC-5 are architecture-certified and cross-path equivalence is proven.
 
