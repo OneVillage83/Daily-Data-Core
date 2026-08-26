@@ -103,19 +103,20 @@ def best_american_price(prices: tuple[float, ...]) -> float:
 def classify_freshness(
     provider_updated_at: datetime | None,
     observed_at: datetime,
-    thresholds: FreshnessThresholds = FreshnessThresholds(),
+    thresholds: FreshnessThresholds | None = None,
 ) -> FreshnessStatus:
     require_aware(observed_at, "observed_at")
+    active_thresholds = thresholds or FreshnessThresholds()
     if provider_updated_at is None:
         return FreshnessStatus.UNKNOWN
     require_aware(provider_updated_at, "provider_updated_at")
     age = (observed_at - provider_updated_at).total_seconds()
-    if age < -thresholds.future_tolerance_seconds:
+    if age < -active_thresholds.future_tolerance_seconds:
         return FreshnessStatus.UNKNOWN
     age = max(age, 0.0)
-    if age <= thresholds.fresh_seconds:
+    if age <= active_thresholds.fresh_seconds:
         return FreshnessStatus.FRESH
-    if age <= thresholds.stale_seconds:
+    if age <= active_thresholds.stale_seconds:
         return FreshnessStatus.AGING
     return FreshnessStatus.STALE
 
@@ -156,10 +157,11 @@ class ConsensusSummary:
 
 def consensus_two_way(
     offers: tuple[TwoWayOffer, ...],
-    thresholds: ConsensusThresholds = ConsensusThresholds(),
+    thresholds: ConsensusThresholds | None = None,
 ) -> ConsensusSummary:
     if not offers:
         raise ValueError("at least one two-way offer is required")
+    active_thresholds = thresholds or ConsensusThresholds()
     first_name = offers[0].first_side
     second_name = offers[0].second_side
     line = offers[0].line
@@ -174,11 +176,11 @@ def consensus_two_way(
     ]
     first_mean = fmean(fair_first)
     count = len(offers)
-    if count < thresholds.minimum_books:
+    if count < active_thresholds.minimum_books:
         confidence = "insufficient"
-    elif count < thresholds.moderate_books:
+    elif count < active_thresholds.moderate_books:
         confidence = "low"
-    elif count < thresholds.high_books:
+    elif count < active_thresholds.high_books:
         confidence = "moderate"
     else:
         confidence = "high"
