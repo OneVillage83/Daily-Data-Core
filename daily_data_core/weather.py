@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import cast
 
-from daily_data_core.http import HttpClient
+from daily_data_core.http import JsonHttpClient
 from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import TemporalProvenance, require_aware
 
@@ -218,7 +218,7 @@ def _metadata_pairs(**values: object) -> tuple[tuple[str, str], ...]:
 
 
 class NwsWeatherClient:
-    def __init__(self, http: HttpClient, user_agent: str) -> None:
+    def __init__(self, http: JsonHttpClient, user_agent: str) -> None:
         if not user_agent.strip():
             raise ValueError("NWS user_agent cannot be blank")
         self.http = http
@@ -314,7 +314,7 @@ class NwsWeatherClient:
 
 
 class OpenWeatherClient:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: JsonHttpClient) -> None:
         self.http = http
 
     def collect(
