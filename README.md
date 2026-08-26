@@ -6,18 +6,40 @@ It owns infrastructure that should not be reimplemented separately in Daily-MLB,
 
 Sport repositories own sport ontology, sport-specific normalization, feature engineering, models, simulation, recommendation logic, and sport-specific interpretations of shared data.
 
-## Status
+## Current implementation status
 
-Repository bootstrap in progress. The governing implementation sequence is:
+- DDC-0 Architecture & ownership contract: implemented; certification pending PR quality gates
+- DDC-1 Repo/runtime/provenance foundation: implemented; certification pending
+- DDC-2 Generic Odds + Market Core: implemented; certification pending
+- DDC-3 Weather Core: implemented; certification pending
+- DDC-4 Venue/Geospatial Core: implemented; certification pending
+- DDC-5 Travel/Rest Core foundation: implemented; certification pending
+- DDC-6 Daily-MLB compatibility migration: next after core certification
+- DDC-7 Daily-NFL integration migration: follows MLB compatibility proof
+- DDC-8 Daily-NCAAF integration: use DDC from first implementation milestone
 
-1. DDC-0 — Architecture & ownership contract
-2. DDC-1 — Repo/runtime/provenance foundation
-3. DDC-2 — Generic Odds + Market Core extracted/generalized from Daily-MLB
-4. DDC-3 — Weather Core extracted/generalized from Daily-MLB
-5. DDC-4 — Venue/Geospatial Core
-6. DDC-5 — Travel/Rest Core foundation
-7. DDC-6 — Daily-MLB compatibility adapter + regression contract
-8. DDC-7 — Daily-NFL integration contract
-9. DDC-8 — Daily-NCAAF integration contract
+The governing documents live in `docs/`. The active bootstrap work is reviewed in draft PR #1.
 
-Implementation must preserve strict point-in-time semantics and immutable source evidence. Shared acquisition is not allowed to leak sport-specific model assumptions into the core.
+## Engineering baseline
+
+- Python 3.12
+- immutable raw evidence before normalization
+- explicit source and temporal provenance
+- point-in-time `available_at` semantics
+- all-book market snapshots retained beneath derived consensus
+- pytest / Ruff / strict mypy quality gates
+- sport-specific identity/model interpretation prohibited from the shared core
+
+## Local quality gates
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install "pip==26.1.2" "pip-tools==7.6.0"
+python -m pip install -r requirements-dev.in
+python -m pytest -q
+python -m ruff check .
+python -m mypy
+```
+
+Compiled hashed dependency locks will be generated and committed as part of DDC-1 certification; do not hand-edit them.
