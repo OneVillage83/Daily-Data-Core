@@ -1,88 +1,107 @@
-# DDC Local Validation — 2026-08-26
+# Daily Data Core Validation — 2026-08-26
 
 Branch: `feature/ddc-core-bootstrap`
-Status: **CURRENT EXPANDED SUITE PENDING FINAL LOCAL QUALITY GATES**
+Status: **FINAL CURRENT-HEAD VALIDATION — PASS**
 
-## Earlier direct-execution checkpoint
-An earlier DDC-1 through DDC-5 checkpoint was reconstructed in an isolated Python environment and produced:
+## Final hosted certification execution
 
-- Python module compilation (`compileall`): **PASS**;
-- regression suite at that checkpoint: **14 passed in 0.15s**.
+The final expanded DDC-0 through DDC-5 branch was validated through GitHub Actions on **CPython 3.12.14**.
 
-That result is retained as historical evidence only. It is **not** the final validation result for the current branch because additional compatibility tests and hardening changes were added afterward.
+Certification run:
+- GitHub Actions run: `33009126114`
+- quality job: `98310500803`
+- runner: Ubuntu 24.04
+- Python: 3.12.14
 
-The earlier 14-test checkpoint covered:
-- timezone-aware temporal provenance and `available_at <= observed_at` guards;
-- content-addressed raw evidence write/idempotence and SHA-256 identity;
-- credential query-string redaction;
-- American odds conversion, hold, two-way no-vig, and proportional 2+ outcome no-vig;
-- market freshness and cross-book consensus/disagreement;
-- provider sport-key mapping for MLB/NFL/NCAAF;
-- line-aware h2h/spread/total offer grouping;
-- NWS wind-speed parsing and sport-neutral weather-source comparison;
-- SF-to-LA haversine distance sanity and neutral vector geometry;
-- exact rest, travel distance, elapsed travel time, and timezone-shift calculation.
+Permanent CI sequence:
+1. install pinned bootstrap tooling (`pip==26.1.2`, `pip-tools==7.6.0`);
+2. install `requirements-dev.txt` with `pip --require-hashes`;
+3. recompile `requirements.txt` and `requirements-dev.txt` from their `.in` sources;
+4. require zero dependency-lock diff;
+5. run pytest;
+6. run Ruff;
+7. run strict mypy.
 
-## Hardening added after the 14-test checkpoint
-The branch has since been strengthened for DDC-6 compatibility and strict-quality readiness.
+Final results:
+- hash-locked dependency installation: **PASS**;
+- dependency lock regeneration/drift verification: **PASS**;
+- pytest: **28 passed in 0.66s**;
+- Ruff: **PASS — All checks passed!**;
+- strict mypy: **PASS — Success: no issues found in 11 source files**.
+
+## Compatibility/hardening coverage included in the final suite
+
+### Temporal provenance and evidence
+- timezone-aware timestamps;
+- `available_at <= observed_at` enforcement;
+- exact-byte immutable provider payloads;
+- content-addressed SHA-256 identity and idempotent evidence writes.
 
 ### HTTP/transport
-- Python 3.12 `type` alias syntax replaces legacy `typing.TypeAlias` usage;
-- shared `JsonHttpClient` structural protocol added so provider adapters depend on capability rather than the concrete client;
-- retry/redaction/diagnostic code reformatted for configured Ruff rules;
-- compatibility regressions added for Retry-After caps, timeout/connection retry behavior, permanent-error behavior, invalid JSON, quota diagnostics, and secret redaction.
+- retryable status handling;
+- Retry-After caps;
+- timeout/connection retry behavior;
+- permanent-error behavior;
+- invalid JSON handling;
+- request/quota diagnostics;
+- credential query-string redaction;
+- structural transport protocol rather than concrete-client coupling.
 
-### Odds
-- exact raw provider response bytes remain available through `ProviderPayload`;
-- granular malformed event/bookmaker/market/outcome behavior is regression-tested against mature Daily-MLB expectations;
-- requested-sport isolation is enforced so a mismatched provider event cannot leak across sports;
-- home/away equality is rejected;
-- bookmaker-level `last_update` is preserved;
-- **market-level `last_update` is now also preserved**;
-- line-aware offers use the market timestamp when available and fall back to bookmaker timestamp;
-- multi-sport request construction is regression-tested.
+### Odds/market core
+- American implied probabilities;
+- hold and proportional no-vig math;
+- multi-outcome no-vig behavior;
+- best-price selection;
+- market freshness and consensus/disagreement;
+- line-aware h2h/spread/total grouping;
+- exact raw provider bytes;
+- granular malformed event/bookmaker/market/outcome handling;
+- requested-sport isolation;
+- same-participant event rejection;
+- bookmaker-level and market-level update timestamps;
+- market-specific freshness preference;
+- MLB/NFL/NCAAF provider sport-key coverage.
 
 ### Weather
-- cloud cover and pressure are retained as sport-neutral normalized fields;
-- NWS provider-specific descriptive values (`wind_speed_text`, `wind_direction_cardinal`, `forecast_office`) survive in immutable source metadata;
-- compatibility regressions preserve the current Daily-MLB normalized weather surface;
-- weather values are range/finite validated.
+- NWS acquisition and wind parsing;
+- OpenWeather acquisition;
+- neutral cross-provider comparison;
+- cloud cover and pressure preservation;
+- NWS `wind_speed_text`, `wind_direction_cardinal`, and `forecast_office` compatibility metadata;
+- range and finite-value validation.
 
-### Venue/travel/provider metadata
-- NaN/infinite coordinates, bearings, directions, and recovery values fail closed;
-- timezone names are validated through `zoneinfo`;
-- optional provider schema/attribution metadata cannot be silently blank;
-- source/evidence modules were reformatted for strict lint readiness.
+### Venue / travel / recovery
+- haversine/geospatial sanity checks;
+- neutral vector components;
+- NaN/infinite fail-closed validation;
+- timezone validation;
+- travel distance and elapsed time;
+- exact rest and timezone shift;
+- finite/nonnegative recovery facts.
 
-### DDC-6 preparation
-- `docs/DDC6_MLB_MIGRATION_PLAN.md` defines the side-by-side migration/equivalence process;
-- Daily-MLB has a separate baseline branch/PR containing no production runtime migration yet;
-- legacy MLB shared code may not be removed before DDC certification and compatibility evidence.
+## Historical checkpoint
 
-## Current required final validation
-Because the branch changed after the earlier execution checkpoint, all quality gates must be rerun on the current head under Python 3.12:
+Before the Daily-MLB compatibility expansion, an earlier reconstructed foundation checkpoint compiled successfully and reported **14 tests passed**. That result is retained only as historical evidence. Architecture certification is based on the final 28-test hosted execution and the hash-lock/Ruff/mypy gates above.
 
-```powershell
-python -m pytest -q
-python -m ruff check .
-python -m mypy .
-```
+## Issues found and corrected during certification
 
-The current branch also requires compiled hashed locks before architecture certification:
+The hosted validation process exposed and resolved:
+- an invalid `types-requests` development pin;
+- Python 3.12/Ruff modernization and import-order issues;
+- strict-mypy variable-inference ambiguity in weather validation loops;
+- dependency-lock commit detection for newly generated files;
+- permanent CI enforcement of `--require-hashes` and lock-drift detection.
 
-```powershell
-python -m piptools compile --resolver=backtracking --generate-hashes --strip-extras --allow-unsafe --output-file=requirements.txt requirements.in
-python -m piptools compile --resolver=backtracking --generate-hashes --strip-extras --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in
-python -m pip install --require-hashes -r requirements-dev.txt
-python -m pytest -q
-python -m ruff check .
-python -m mypy .
-```
+Earlier architecture review had already resolved:
+- callable default arguments likely to violate Ruff B008;
+- dropped market-level odds timestamp provenance;
+- dropped MLB weather compatibility fields;
+- cross-sport event contamination risk;
+- non-finite geospatial input acceptance;
+- moving-branch consumer dependency risk.
 
-## Hosted-CI status
-The GitHub Actions workflow exists on `main` and the feature branch, but GitHub is not emitting workflow/status checks for this repository/PR through the available integration. Attempts to use a separate isolated execution runner also failed because that environment cannot resolve external hosts, so it cannot clone the current branch or install missing lint/type-check dependencies.
+## Certification outcome
 
-This is treated as an infrastructure/capability gap, **not** as a green hosted build.
+**DDC-0 through DDC-5 are ARCHITECTURE-CERTIFIED.** The shared foundation has passed its architecture, behavioral, reproducibility, lint, and strict type-check gates.
 
-## Certification decision
-DDC-0 through DDC-5 remain **IMPLEMENTATION COMPLETE — CERTIFICATION PENDING QUALITY GATES**. The earlier 14-pass checkpoint demonstrates that the original foundation executed successfully, but the current expanded branch is not architecture-certified until the fresh pytest, Ruff, strict-mypy, lock-generation/install, and final conformance review all pass.
+The next controlled phase is DDC-6: release the certified core as an immutable versioned wheel, hash-pin that artifact into Daily-MLB, then implement side-by-side compatibility adapters while preserving the legacy MLB regression oracle until equivalence and tiny real-provider validation are proven.
