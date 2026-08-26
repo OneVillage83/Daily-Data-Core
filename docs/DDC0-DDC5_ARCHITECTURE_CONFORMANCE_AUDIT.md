@@ -2,124 +2,130 @@
 
 Date: 2026-08-26
 Branch: `feature/ddc-core-bootstrap`
-Status: **IMPLEMENTATION COMPLETE — CERTIFICATION PENDING QUALITY GATES**
+Status: **ARCHITECTURE-CERTIFIED**
 
 ## Audit scope
+
 This audit compares the implemented Daily Data Core foundation against the governing DDC-0 through DDC-5 roadmap, ownership boundaries, integration contracts, and the Daily-MLB compatibility inventory discovered while preparing DDC-6.
 
 ## DDC-0 — Architecture & ownership contract
-**Conforms.** Governing architecture, ownership boundaries, decisions, extraction map, implementation roadmap, and sport integration contracts are versioned in `docs/`.
 
-Key invariant verified: DDC owns sport-agnostic facts/infrastructure only. Permanent sport identity, sport features, models, simulation, market-value interpretation, Recommendation Gate behavior, and sport settlement remain in consuming sport repositories.
+**Conforms — ARCHITECTURE-CERTIFIED.** Governing architecture, ownership boundaries, decisions, extraction map, implementation roadmap, package policy, and sport integration contracts are versioned in `docs/`.
 
-## DDC-1 — Repo/runtime/provenance foundation
-**Conforms, certification pending.** Implemented:
+Key invariant: DDC owns sport-agnostic facts/infrastructure only. Permanent sport identity, sport features, models, simulation, market-value interpretation, Recommendation Gate behavior, and sport settlement remain in consuming sport repositories.
+
+## DDC-1 — Runtime / provenance / provider / HTTP foundation
+
+**Conforms — ARCHITECTURE-CERTIFIED.** Implemented and validated:
 - Python 3.12 installable package metadata;
 - generic temporal provenance with timezone awareness and `available_at <= observed_at`;
 - extensible provider capability/descriptor/acquisition contracts;
-- structural JSON HTTP-client protocol plus hardened concrete HTTP client;
+- structural JSON HTTP-client protocol plus hardened concrete client;
 - exact-byte `ProviderPayload` evidence envelope;
 - SHA-256 content-addressed immutable filesystem evidence store;
-- shared HTTP retries, Retry-After handling, diagnostics, quota headers, and safe URL redaction;
+- retries, Retry-After handling, request diagnostics, quota headers, and safe URL redaction;
 - provider schema/attribution validation;
-- pytest/Ruff/strict-mypy configuration.
+- reproducible SHA-256 dependency locks.
 
-Remaining certification items:
-- execute the current expanded pytest suite successfully;
-- execute Ruff and strict mypy successfully;
-- generate/validate compiled dependency locks under Python 3.12.
+## DDC-2 — Generic odds + market core
 
-## DDC-2 — Generic Odds + Market Core
-**Conforms, certification pending.** Implemented:
+**Conforms — ARCHITECTURE-CERTIFIED.** Implemented and validated:
 - American implied probability;
 - hold calculation;
 - two-way and proportional 2+ outcome no-vig math;
 - best American price;
 - freshness classification;
-- cross-book two-way consensus and disagreement;
+- cross-book consensus/disagreement;
 - configurable The Odds API V4 sport-key adapter;
-- immutable book/market/outcome snapshots;
+- immutable event/book/market/outcome snapshots;
 - bookmaker-level and market-level provider update timestamps;
 - line-aware h2h/spread/total grouping;
 - granular malformed provider-element warnings;
-- requested-sport isolation and same-participant event rejection;
-- exact raw response bytes retained independently of normalized snapshots;
-- raw participant strings retained without DDC canonical team identity.
+- requested-sport isolation and same-participant rejection;
+- exact raw response bytes independent from normalized snapshots;
+- raw participant strings without DDC-owned permanent team identity.
 
-Freshness invariant: where a market-level provider timestamp exists, normalized offers retain that more specific timestamp; bookmaker timestamp is the fallback.
+Freshness invariant: market-level provider timestamps are preferred when present; bookmaker timestamps are the fallback.
 
-Boundary check: DDC does not calculate model edge, EV recommendation, sport fair probability, or permanent team/player identity.
+Boundary check: DDC does not calculate model edge, recommendation EV, sport-model fair probability, or permanent team/player identity.
 
-## DDC-3 — Weather Core
-**Conforms, certification pending.** Implemented:
+## DDC-3 — Weather core
+
+**Conforms — ARCHITECTURE-CERTIFIED.** Implemented and validated:
 - NWS point/hourly acquisition;
-- OpenWeather One Call 3.0 hourly acquisition;
+- OpenWeather One Call hourly acquisition;
 - exact raw source evidence;
-- forecast snapshot timestamps/provenance;
-- temperature, humidity, precipitation probability, wind speed/direction normalization;
-- cloud-cover and pressure normalization;
-- immutable provider-specific descriptive metadata for fields that do not belong in the cross-provider numeric schema;
+- forecast point-in-time provenance;
+- temperature, humidity, precipitation probability, wind speed/direction;
+- cloud cover and pressure;
+- immutable provider-specific descriptive metadata;
 - source comparison/disagreement;
-- value/range and temporal validation.
+- value/range/finite validation.
 
-DDC-6 compatibility inventory explicitly verified that the existing MLB OpenWeather path exposes cloud cover/pressure and the NWS path exposes `wind_speed_text`, `wind_direction_cardinal`, and `forecast_office`; the DDC contract was extended before certification so those values are not silently lost in migration.
+The Daily-MLB compatibility inventory proved that cloud cover, pressure, `wind_speed_text`, `wind_direction_cardinal`, and `forecast_office` must remain available. DDC was extended before certification so those fields are not silently lost.
 
-Boundary check: baseball `blowing_in/out` and football passing/kicking effects are absent from DDC.
+Boundary check: baseball `blowing_in/out` and football-specific passing/kicking effects remain outside DDC.
 
-## DDC-4 — Venue/Geospatial Core
-**Conforms, certification pending.** Implemented:
-- finite validated coordinates;
+## DDC-4 — Venue / geospatial core
+
+**Conforms — ARCHITECTURE-CERTIFIED.** Implemented and validated:
+- finite coordinates;
 - timezone name;
-- generic roof type;
-- finite generic reference bearing;
+- neutral roof type;
+- finite reference bearing;
 - haversine distance;
 - initial bearing;
 - angular difference;
 - neutral longitudinal/cross-vector decomposition;
-- NaN/infinite geometry inputs fail closed.
+- fail-closed NaN/infinite geometry validation.
 
-Boundary check: sport-specific venue geometry semantics remain outside DDC.
+Boundary check: sport-specific venue geometry interpretation remains outside DDC.
 
-## DDC-5 — Travel/Rest Core
-**Conforms, certification pending.** Implemented:
+## DDC-5 — Travel / rest core
+
+**Conforms — ARCHITECTURE-CERTIFIED.** Implemented and validated:
 - neutral travel segment contract;
 - travel distance;
 - elapsed travel time;
-- timezone validation and timezone shift at a specific timestamp;
+- timezone validation and shift at a specific timestamp;
 - exact rest hours;
 - finite/nonnegative recovery-context facts.
 
-Boundary check: no hard-coded sport fatigue or betting penalty coefficients exist in DDC.
+Boundary check: DDC contains no hard-coded sport fatigue or betting penalty coefficients.
 
-## DDC-6 pre-migration findings that affected core certification
-Preparing the Daily-MLB regression oracle uncovered several shared-core requirements before any MLB runtime migration was allowed:
-1. market-level odds timestamps must survive DDC normalization;
-2. cloud cover and pressure must survive shared weather normalization;
-3. NWS descriptive/source metadata must remain available to the MLB compatibility adapter;
-4. exact provider bytes in DDC and sanitized canonical MLB artifact bytes are distinct evidence/output layers and must not be conflated;
-5. cross-sport provider events must fail closed rather than entering the wrong consumer.
+## DDC-6 findings incorporated before certification
 
-These findings are incorporated into the current DDC branch and regression suite.
+Preparing the Daily-MLB regression oracle exposed and resolved these shared-core requirements:
+1. market-level odds timestamps must survive normalization;
+2. cloud cover and pressure must survive weather normalization;
+3. NWS descriptive/source metadata must remain available to compatibility adapters;
+4. DDC exact provider bytes and MLB sanitized canonical artifact bytes are distinct evidence/output layers;
+5. cross-sport provider events must fail closed;
+6. consumer dependency distribution must be immutable and hash-verifiable rather than a moving branch reference.
 
-## Verification evidence
-An earlier foundation checkpoint produced:
-- Python compilation: PASS;
-- regression tests: **14 passed**.
+## Final verification evidence
 
-That checkpoint predates the DDC-6 compatibility expansion and is historical evidence only. The current branch contains additional production hardening and compatibility tests, so a fresh final execution is required.
+Hosted GitHub Actions validation on 2026-08-26 used **CPython 3.12.14**.
 
-Manual architecture/static review has additionally identified and corrected:
-- callable default arguments likely to violate Ruff B008;
-- legacy `typing.TypeAlias` usage under Python 3.12/UP rules;
-- unused imports in new compatibility tests;
-- long lines in core modules under the configured Ruff line length;
-- dropped market-level odds timestamp provenance;
-- dropped MLB weather compatibility fields;
-- non-finite geospatial input acceptance.
+Permanent CI verifies:
+- pinned pip/pip-tools bootstrap;
+- `pip install --require-hashes -r requirements-dev.txt`;
+- regeneration of both compiled locks with zero diff;
+- pytest;
+- Ruff;
+- strict mypy.
 
-Hosted GitHub workflow/status checks are currently not being emitted despite the workflow existing on `main` and the feature branch. The isolated execution runner also cannot resolve external hosts. These are infrastructure/capability gaps, not passes.
+Final result from GitHub Actions run `33009126114`, job `98310500803`:
+- hash-locked installation: **PASS**;
+- dependency lock drift check: **PASS**;
+- pytest: **28 passed in 0.66s**;
+- Ruff: **All checks passed**;
+- mypy: **Success: no issues found in 11 source files**.
+
+Earlier 14-test execution remains historical evidence only; the certification decision is based on the final expanded 28-test branch plus the reproducibility and static-quality gates above.
 
 ## Certification decision
-DDC-0 through DDC-5 are **not yet ARCHITECTURE-CERTIFIED**. Implementation is sufficiently complete to enter final quality-gate validation, but certification requires successful current-head pytest + Ruff + strict-mypy execution, reproducible hashed dependency locks, and final architecture review.
 
-DDC-6 consumer migration may continue through documentation, baseline freezing, and side-by-side adapter preparation, but it must not delete Daily-MLB legacy shared implementations until DDC-0 through DDC-5 certification is complete and MLB regression equivalence is proven.
+**DDC-0 through DDC-5 are ARCHITECTURE-CERTIFIED.** No unresolved architecture-boundary or quality-gate blocker remains for the shared foundation.
+
+DDC-6 may now advance from baseline preparation into dependency introduction and side-by-side production compatibility adapters. Daily-MLB legacy shared implementations remain in place until cross-path equivalence, tiny real-provider validation, output/database compatibility, credential-safety checks, and Daily-MLB quality gates are all proven.
