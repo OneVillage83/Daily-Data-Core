@@ -8,15 +8,17 @@ Sport repositories own sport ontology, sport-specific normalization, feature eng
 
 ## Current implementation status
 
-- DDC-0 Architecture & ownership contract: implemented; certification pending PR quality gates
-- DDC-1 Repo/runtime/provenance foundation: implemented; certification pending
-- DDC-2 Generic Odds + Market Core: implemented; certification pending
-- DDC-3 Weather Core: implemented; certification pending
-- DDC-4 Venue/Geospatial Core: implemented; certification pending
-- DDC-5 Travel/Rest Core foundation: implemented; certification pending
+- DDC-0 Architecture & ownership contract: implemented; certification pending final quality gates
+- DDC-1 Repo/runtime/provenance foundation: implemented; certification pending final quality gates
+- DDC-2 Generic Odds + Market Core: implemented; certification pending final quality gates
+- DDC-3 Weather Core: implemented; certification pending final quality gates
+- DDC-4 Venue/Geospatial Core: implemented; certification pending final quality gates
+- DDC-5 Travel/Rest Core foundation: implemented; certification pending final quality gates
 - DDC-6 Daily-MLB compatibility migration: next after core certification
 - DDC-7 Daily-NFL integration migration: follows MLB compatibility proof
 - DDC-8 Daily-NCAAF integration: use DDC from first implementation milestone
+
+Final direct execution of the hardened DDC-1 through DDC-5 branch passes Python compilation and **14 regression tests**. Ruff/strict mypy remain required before certification; hosted GitHub checks are currently not being emitted and that gap is documented in `docs/DDC_LOCAL_VALIDATION_20260826.md`.
 
 The governing documents live in `docs/`. The active bootstrap work is reviewed in draft PR #1.
 
