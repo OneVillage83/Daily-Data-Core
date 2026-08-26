@@ -50,7 +50,9 @@ class ProviderCapability:
     cadence: str
     license_class: str
     cost_class: CostClass = CostClass.UNKNOWN
-    historical_availability: HistoricalAvailability = HistoricalAvailability.UNKNOWN
+    historical_availability: HistoricalAvailability = (
+        HistoricalAvailability.UNKNOWN
+    )
     reliability_tier: ReliabilityTier = ReliabilityTier.UNKNOWN
     schema_version: str | None = None
     expected_latency: str | None = None
@@ -65,8 +67,12 @@ class ProviderCapability:
             _nonblank(self.schema_version, "schema_version")
         if self.expected_latency is not None:
             _nonblank(self.expected_latency, "expected_latency")
-        if self.attribution_required and not self.attribution_text:
-            raise ValueError("attribution_text is required when attribution is required")
+        if self.attribution_text is not None:
+            _nonblank(self.attribution_text, "attribution_text")
+        if self.attribution_required and self.attribution_text is None:
+            raise ValueError(
+                "attribution_text is required when attribution is required"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +92,11 @@ class ProviderDescriptor:
             (self.parser_version, "parser_version"),
         ):
             _nonblank(value, label)
+        if self.provider_schema_version is not None:
+            _nonblank(
+                self.provider_schema_version,
+                "provider_schema_version",
+            )
         keys = [capability.dataset_key for capability in self.capabilities]
         if len(keys) != len(set(keys)):
             raise ValueError("provider capabilities cannot repeat dataset_key")
@@ -120,7 +131,10 @@ class ProviderPayload:
         if self.source_uri is not None:
             _nonblank(self.source_uri, "source_uri")
         if self.provider_schema_version is not None:
-            _nonblank(self.provider_schema_version, "provider_schema_version")
+            _nonblank(
+                self.provider_schema_version,
+                "provider_schema_version",
+            )
 
 
 @runtime_checkable
@@ -128,4 +142,7 @@ class ProviderAdapter(Protocol):
     @property
     def descriptor(self) -> ProviderDescriptor: ...
 
-    def acquire(self, request: AcquisitionRequest) -> tuple[ProviderPayload, ...]: ...
+    def acquire(
+        self,
+        request: AcquisitionRequest,
+    ) -> tuple[ProviderPayload, ...]: ...
