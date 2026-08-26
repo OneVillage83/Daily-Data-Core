@@ -13,11 +13,15 @@ During DDC-6, old and new paths run side-by-side until equivalence is demonstrat
 
 Deletion is allowed only after:
 1. DDC-0 through DDC-5 are architecture-certified;
-2. Daily-MLB quality gates pass with DDC installed;
-3. compatibility tests show equivalent behavior for the current MLB contracts;
-4. one tiny real-provider validation succeeds for odds and weather;
-5. raw evidence/provenance differences are explicitly reconciled;
-6. output-contract snapshots remain compatible.
+2. a certified versioned DDC wheel release exists and its SHA-256/source commit are recorded;
+3. Daily-MLB compiles a hashed lock containing that immutable DDC release;
+4. Daily-MLB quality gates pass with DDC installed from the locked dependency;
+5. compatibility tests show equivalent behavior for the current MLB contracts;
+6. one tiny real-provider validation succeeds for odds and weather;
+7. raw evidence/provenance differences are explicitly reconciled;
+8. output-contract snapshots remain compatible.
+
+The package/distribution authority is `PACKAGE_RELEASE_POLICY.md`. A moving branch or unhashed VCS dependency is not an acceptable production dependency.
 
 ## Current Daily-MLB source → DDC ownership map
 
@@ -51,6 +55,8 @@ Existing MLB behavior to preserve:
 - malformed event/bookmaker/market/outcome entries are excluded individually and generate warnings;
 - a malformed element must not mutate the retained raw provider evidence;
 - provider event/book/market fields needed downstream remain available;
+- bookmaker-level and market-level provider timestamps remain available for freshness/provenance;
+- a returned event whose sport key differs from the requested sport fails closed;
 - API keys never appear in errors, manifests, URLs, or committed artifacts.
 
 ### Odds normalization
@@ -83,7 +89,7 @@ Existing MLB normalized weather fields must remain available to the compatibilit
 - OpenWeather `clouds_pct` where currently exported;
 - OpenWeather `pressure_hpa` where currently exported.
 
-This inventory exposed a DDC-3 extension requirement: the base `ForecastSnapshot` must be able to carry source-neutral optional cloud cover and pressure, while provider-specific display metadata may live in an extensible metadata envelope or compatibility adapter. No existing MLB field may silently disappear.
+This inventory exposed a DDC-3 extension requirement: the base `ForecastSnapshot` carries source-neutral optional cloud cover and pressure, while provider-specific display metadata lives in an immutable metadata envelope. No existing MLB field may silently disappear.
 
 ### Raw evidence/provenance
 Daily-MLB currently stores sanitized canonical JSON artifacts and calculates the recorded checksum over those sanitized bytes. DDC's internal `ProviderPayload` intentionally preserves exact response bytes.
@@ -106,12 +112,24 @@ These must not be conflated. DDC exact bytes are not automatically written into 
 
 Exit: legacy behavior is executable as a regression oracle.
 
-### DDC-6B — Dependency introduction
-- add `daily-data-core` as an explicit pinned dependency only after DDC core merge/tag/commit is certified;
-- regenerate Python 3.12 hashed locks;
-- import DDC behind MLB compatibility modules; do not change the pipeline API yet.
+### DDC-6B — Certified package release & dependency introduction
+DDC dependency introduction is a release event, not a branch reference.
 
-Exit: existing MLB pipeline still calls the same MLB interfaces, but those interfaces can delegate internally to DDC.
+Required order:
+1. certify DDC-0 through DDC-5 on the final current head;
+2. merge the certified foundation to `main`;
+3. create a semantic version/tag (initial target `v0.1.0`);
+4. build `daily_data_core-0.1.0-py3-none-any.whl` from that exact certified commit;
+5. calculate/record the wheel SHA-256 and source commit;
+6. publish the wheel as an immutable release asset without moving/replacing the version later;
+7. add the exact versioned wheel URL to Daily-MLB's dependency input;
+8. regenerate Daily-MLB Python 3.12 hashed locks;
+9. verify `pip install --require-hashes -r requirements-dev.txt` accepts the DDC dependency;
+10. import DDC behind MLB compatibility modules; do not change the pipeline API yet.
+
+A temporary local editable/sibling install may be used for equivalence development before release, but it is never the committed production dependency authority.
+
+Exit: existing MLB pipeline still calls the same MLB interfaces, those interfaces can delegate internally to an immutable certified DDC build, and Daily-MLB's compiled lock is the installation authority.
 
 ### DDC-6C — HTTP and evidence adaptation
 - adapt `HttpClient` diagnostics/retry behavior;
@@ -125,6 +143,7 @@ Exit: HTTP/raw tests pass with the DDC implementation under the MLB interface.
 - delegate The Odds API request to DDC;
 - transform DDC snapshots/warnings to current MLB collector shape;
 - preserve full raw provider payload for existing exports;
+- preserve bookmaker/market freshness timestamps;
 - run the entire existing odds collector suite plus new cross-path equivalence tests.
 
 Exit: old-path and DDC-path normalized event/warning behavior are equivalent for the locked fixtures.
@@ -173,7 +192,7 @@ python -m ruff check .
 python -m mypy .
 ```
 
-DDC itself must separately remain green under its own gates.
+DDC itself must separately remain green under its own gates, and Daily-MLB must install the released DDC dependency from its normal hashed lock before migration certification.
 
 ## Definition of done
-DDC-6 is complete when Daily-MLB no longer owns generic HTTP/odds/weather acquisition primitives, the same MLB-facing contracts and outputs are preserved, raw evidence lineage is stronger rather than weaker, legacy duplicate code is removed only after equivalence, and the migration has a versioned architecture-conformance/local-validation record.
+DDC-6 is complete when Daily-MLB no longer owns generic HTTP/odds/weather acquisition primitives, the same MLB-facing contracts and outputs are preserved, raw evidence lineage is stronger rather than weaker, the exact certified DDC package is reproducibly installed through Daily-MLB's hash lock, legacy duplicate code is removed only after equivalence, and the migration has a versioned architecture-conformance/local-validation record.
