@@ -1,32 +1,47 @@
-# Ownership Boundaries V1
+# Daily Data Core Ownership Boundaries
 
-This document is authoritative when deciding whether code belongs in Daily Data Core or a sport repository.
+## Principle
+If a fact can be acquired/normalized once and interpreted differently by multiple sports, DDC should usually own the fact while the sport owns the interpretation.
 
-| Concern | Daily Data Core owns | Sport repository owns |
-|---|---|---|
-| HTTP | retries, timeout, status diagnostics, quota headers, safe URL handling | provider-specific request semantics only when unique to sport source |
-| Raw evidence | checksums, immutable storage, evidence IDs, generic clocks | sport-specific parsing and reconciliation |
-| Provider metadata | reliability, licensing, cadence, PIT fidelity, schema/parser version | sport-domain capability meaning |
-| Odds | acquisition, raw book quotes, American/decimal math, hold, no-vig, freshness, consensus, line grouping | team/player identity, sport labels, model fair probability, edge/EV interpretation, Recommendation Gate |
-| Weather | NWS/OpenWeather acquisition, forecast snapshots, normalized meteorology, source disagreement | sport-specific effects and features |
-| Venue | coordinates, timezone, roof class, generic orientation/bearing, source provenance | sport geometry/feature semantics not reusable elsewhere |
-| Travel | distance, timezone shift, itinerary, elapsed rest | sport-specific fatigue/recovery transforms |
-| Identity | provider/source IDs and raw participant strings | permanent canonical team/player/game identity |
-| PIT | generic temporal provenance and eligibility helpers | sport-specific prediction cutoffs and leakage rules |
-| Models | none | all sport prediction models, simulation, calibration, feature registries |
-| Recommendations | none | BET/LEAN/PASS/AVOID and settlement/performance logic |
+## DDC owns
+- shared HTTP/retry/diagnostic primitives;
+- provider capability/licensing metadata;
+- exact immutable raw response evidence;
+- generic temporal provenance;
+- generic sportsbook quote acquisition and math;
+- quote/book/market timestamps and freshness primitives;
+- weather forecast acquisition and normalized meteorological facts;
+- generic venue coordinates/timezone/roof/reference geometry;
+- neutral travel distance/timezone/rest facts;
+- versioned shared-package release artifacts used by multiple sport repositories.
 
-## Decision test
-Code belongs in DDC only if it can be correctly executed without knowing the rules of the sport.
+## DDC does not own
+- MLB/NFL/NCAAF permanent team/player/game identity;
+- lineup/depth/injury interpretation specific to a sport;
+- baseball field/weather performance semantics;
+- football field/weather passing/kicking semantics;
+- sport-specific feature registries/state engines;
+- sport model training/inference;
+- simulation engines;
+- model fair prices, edge/EV decisions, Recommendation Gate behavior;
+- sport settlement/report interpretation.
 
-Examples:
-- `american_to_probability(-120)` -> DDC.
-- `wind_to_vector(240 degrees, 12 mph)` -> DDC.
-- `haversine_distance(SF, LA)` -> DDC.
-- `hours_between_arrival_and_kickoff` -> DDC.
-- `wind is blowing out to center at Wrigley` -> Daily-MLB.
-- `crosswind lowers deep-pass efficiency` -> Daily-NFL/NCAAF.
-- `three games in four nights penalty` -> sport repository unless represented only as neutral schedule/rest facts.
+## Identity boundary
+A shared provider may call the same participant differently across products or over time. DDC preserves provider participant/event identity and raw values. Each sport repository maps those to its own canonical ontology/crosswalks.
 
-## Anti-duplication rule
-A consuming sport repository may temporarily retain legacy shared code during migration, but new shared behavior must be implemented in DDC first. Compatibility wrappers in the sport repository should be thin and explicitly marked for removal.
+DDC must not become a hidden universal sports-identity database merely because its odds adapter sees all sports.
+
+## Evidence boundary
+DDC exact-byte evidence is the internal source-evidence layer. A consumer may additionally maintain sanitized/canonical artifacts for its existing output contract. Those layers are distinct and both may be required during migration.
+
+## Weather boundary
+Shared schema includes neutral facts such as wind speed/direction, cloud cover, and pressure when supplied. Provider-specific descriptive fields may be carried in immutable source metadata. A sport-specific classification such as MLB `blowing_out` remains local.
+
+## Market boundary
+Shared schema/math includes generic quotes, lines, implied probability, no-vig, hold, quote freshness, and disagreement/consensus. Market-level provider timestamps are preferred for quote-specific freshness when available, with bookmaker-level timestamps as fallback. Model-derived fair price/edge/EV remain sport/model responsibilities.
+
+## Package boundary
+DDC source ownership does not imply consumers follow DDC `main`. Production consumers use explicit immutable released wheel versions through their own hashed dependency locks. This lets a sport upgrade DDC deliberately and regression-test the transition rather than inheriting every core commit immediately.
+
+## Migration boundary
+A legacy sport-local shared implementation is not removed merely because an equivalent DDC module exists. The consuming sport's current tests/output contract remain authoritative until the DDC-backed path is certified regression-equivalent.
