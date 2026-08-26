@@ -69,18 +69,18 @@ class ForecastSnapshot:
     def __post_init__(self) -> None:
         if not self.provider_id.strip():
             raise ValueError("provider_id cannot be blank")
-        for value, label in (
+        for timestamp_value, label in (
             (self.forecast_time, "forecast_time"),
             (self.observed_at, "observed_at"),
             (self.available_at, "available_at"),
             (self.provider_updated_at, "provider_updated_at"),
         ):
-            if value is not None:
-                require_aware(value, label)
+            if timestamp_value is not None:
+                require_aware(timestamp_value, label)
         if self.available_at > self.observed_at:
             raise ValueError("available_at cannot be later than observed_at")
 
-        for value, label in (
+        for numeric_value, label in (
             (self.temperature_f, "temperature_f"),
             (self.humidity_pct, "humidity_pct"),
             (self.precipitation_probability_pct, "precipitation_probability_pct"),
@@ -89,14 +89,14 @@ class ForecastSnapshot:
             (self.cloud_cover_pct, "cloud_cover_pct"),
             (self.pressure_hpa, "pressure_hpa"),
         ):
-            _validate_optional_finite(value, label)
+            _validate_optional_finite(numeric_value, label)
 
-        for value, label in (
+        for percentage_value, label in (
             (self.humidity_pct, "humidity_pct"),
             (self.precipitation_probability_pct, "precipitation_probability_pct"),
             (self.cloud_cover_pct, "cloud_cover_pct"),
         ):
-            if value is not None and not 0.0 <= value <= 100.0:
+            if percentage_value is not None and not 0.0 <= percentage_value <= 100.0:
                 raise ValueError(f"{label} must be in [0, 100]")
         if self.wind_speed_mph is not None and self.wind_speed_mph < 0:
             raise ValueError("wind_speed_mph cannot be negative")
