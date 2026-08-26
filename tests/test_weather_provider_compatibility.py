@@ -6,13 +6,19 @@ from datetime import datetime, timezone
 import pytest
 
 from daily_data_core.http import HttpRequestDiagnostics, JsonHttpResult
-from daily_data_core.weather import NwsWeatherClient, OpenWeatherClient
+from daily_data_core.weather import (
+    ForecastSnapshot,
+    NwsWeatherClient,
+    OpenWeatherClient,
+)
 
 
 class SequenceHttp:
     def __init__(self, results: list[JsonHttpResult]) -> None:
         self.results = results
-        self.calls: list[tuple[str, dict[str, str] | None, dict[str, str] | None]] = []
+        self.calls: list[
+            tuple[str, dict[str, str] | None, dict[str, str] | None]
+        ] = []
 
     def get_json(
         self,
@@ -46,7 +52,9 @@ def _result(payload: dict[str, object], url: str) -> JsonHttpResult:
 def test_nws_preserves_mlb_compatibility_metadata_and_exact_evidence() -> None:
     point_payload: dict[str, object] = {
         "properties": {
-            "forecastHourly": "https://api.weather.gov/gridpoints/MTR/1,2/forecast/hourly",
+            "forecastHourly": (
+                "https://api.weather.gov/gridpoints/MTR/1,2/forecast/hourly"
+            ),
             "cwa": "MTR",
         }
     }
@@ -67,13 +75,16 @@ def test_nws_preserves_mlb_compatibility_metadata_and_exact_evidence() -> None:
             ],
         }
     }
-    point = _result(point_payload, "https://api.weather.gov/points/1.0000,2.0000")
+    point = _result(
+        point_payload,
+        "https://api.weather.gov/points/1.0000,2.0000",
+    )
     forecast = _result(
         forecast_payload,
         "https://api.weather.gov/gridpoints/MTR/1,2/forecast/hourly",
     )
     http = SequenceHttp([point, forecast])
-    client = NwsWeatherClient(http, "TheDailyLine/1.0 test@example.com")  # type: ignore[arg-type]
+    client = NwsWeatherClient(http, "TheDailyLine/1.0 test@example.com")
 
     result = client.collect(
         1.0,
@@ -107,9 +118,12 @@ def test_openweather_preserves_cloud_cover_pressure_and_exact_evidence() -> None
             }
         ]
     }
-    raw = _result(payload, "https://api.openweathermap.org/data/3.0/onecall")
+    raw = _result(
+        payload,
+        "https://api.openweathermap.org/data/3.0/onecall",
+    )
     http = SequenceHttp([raw])
-    client = OpenWeatherClient(http)  # type: ignore[arg-type]
+    client = OpenWeatherClient(http)
 
     result = client.collect(
         38.58,
@@ -129,7 +143,6 @@ def test_openweather_preserves_cloud_cover_pressure_and_exact_evidence() -> None
 
 def test_weather_snapshot_rejects_invalid_provider_values() -> None:
     now = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
-    from daily_data_core.weather import ForecastSnapshot
 
     with pytest.raises(ValueError, match="cloud_cover_pct"):
         ForecastSnapshot(
