@@ -1,0 +1,83 @@
+name: Release Daily Data Core v0.1.0
+
+on:
+  push:
+    branches:
+      - release/v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out certified source commit
+        uses: actions/checkout@v4
+        with:
+          ref: 0e7e918b1a1157d48a4eecd2c6ca6e61554cc6b0
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install "build==1.5.0"
+      - name: Build wheel
+        run: python -m build --wheel
+      - name: Verify wheel identity and installability
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t wheels < <(find dist -maxdepth 1 -type f -name '*.whl' -print)
+          test "${#wheels[@]}" -eq 1
+          wheel="${wheels[0]}"
+          test "$(basename "$wheel")" = "daily_data_core-0.1.0-py3-none-any.whl"
+          python -m venv .release-venv
+          .release-venv/bin/python -m pip install "$wheel"
+          .release-venv/bin/python - <<'PY'
+          import daily_data_core
+          assert daily_data_core.__version__ == "0.1.0", daily_data_core.__version__
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          required = {
+              "daily_data_core/__init__.py",
+              "daily_data_core/http.py",
+              "daily_data_core/markets.py",
+              "daily_data_core/odds.py",
+              "daily_data_core/provenance.py",
+              "daily_data_core/providers.py",
+              "daily_data_core/temporal.py",
+              "daily_data_core/travel.py",
+              "daily_data_core/venues.py",
+              "daily_data_core/version.py",
+              "daily_data_core/weather.py",
+          }
+          missing = sorted(required - names)
+          assert not missing, f"wheel missing package files: {missing}"
+          PY
+      - name: Calculate artifact SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          sha256sum "$wheel" | tee "$wheel.sha256"
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          gh release create v0.1.0 \
+            "$wheel" \
+            "$wheel.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 0e7e918b1a1157d48a4eecd2c6ca6e61554cc6b0 \
+            --title "Daily Data Core v0.1.0" \
+            --notes "Initial architecture-certified Daily Data Core release. Source commit: 0e7e918b1a1157d48a4eecd2c6ca6e61554cc6b0. DDC-0 through DDC-5 are certified; this immutable wheel is the production dependency artifact for DDC-6 consumer migration."
