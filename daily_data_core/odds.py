@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from daily_data_core.http import HttpClient, HttpRequestDiagnostics
@@ -173,7 +173,7 @@ def _timestamp(value: object, label: str) -> datetime:
         raise OddsProviderSchemaError(f"{label} must be ISO-8601") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise OddsProviderSchemaError(f"{label} must be timezone-aware")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _optional_timestamp(value: object, label: str) -> datetime | None:
@@ -456,7 +456,7 @@ class TheOddsApiClient:
             raise OddsProviderSchemaError(
                 "The Odds API odds root must be a list"
             )
-        observed_at = datetime.now(timezone.utc)
+        observed_at = datetime.now(UTC)
         warnings: list[OddsCollectionWarning] = []
         parsed_events: list[OddsEventSnapshot] = []
         for item in result.payload:

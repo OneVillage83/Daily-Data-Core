@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Protocol, runtime_checkable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -94,8 +94,8 @@ def _http_date_utc(value: str | None) -> str | None:
     except (TypeError, ValueError, OverflowError):
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).isoformat()
 
 
 def _retry_after_seconds(value: str | None, maximum: float) -> float | None:
@@ -109,9 +109,9 @@ def _retry_after_seconds(value: str | None, maximum: float) -> float | None:
         except (TypeError, ValueError, OverflowError):
             return None
         if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=timezone.utc)
+            retry_at = retry_at.replace(tzinfo=UTC)
         delay = (
-            retry_at.astimezone(timezone.utc) - datetime.now(timezone.utc)
+            retry_at.astimezone(UTC) - datetime.now(UTC)
         ).total_seconds()
     if not math.isfinite(delay):
         return None

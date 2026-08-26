@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -21,7 +21,7 @@ def test_parse_wind_speed_averages_nws_ranges() -> None:
 
 
 def test_weather_comparison_is_sport_neutral() -> None:
-    now = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
     first = ForecastSnapshot(
         provider_id="nws",
         forecast_time=now,

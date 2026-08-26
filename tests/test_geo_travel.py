@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -22,7 +22,7 @@ def test_vector_components_are_neutral_geometry() -> None:
 
 
 def test_travel_and_exact_rest_context() -> None:
-    departed = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
+    departed = datetime(2026, 9, 10, 18, 0, tzinfo=UTC)
     arrived = departed + timedelta(hours=2)
     next_start = departed + timedelta(hours=48)
     segment = TravelSegment(

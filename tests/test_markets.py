@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -53,7 +53,7 @@ def test_consensus_preserves_book_count_and_disagreement() -> None:
 
 
 def test_freshness_classification() -> None:
-    observed = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    observed = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
     thresholds = FreshnessThresholds(fresh_seconds=120, stale_seconds=300)
     assert (
         classify_freshness(observed - timedelta(seconds=30), observed, thresholds)

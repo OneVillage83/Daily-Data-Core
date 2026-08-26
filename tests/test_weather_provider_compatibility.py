@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -89,7 +89,7 @@ def test_nws_preserves_mlb_compatibility_metadata_and_exact_evidence() -> None:
     result = client.collect(
         1.0,
         2.0,
-        datetime(2026, 8, 27, 3, 0, tzinfo=timezone.utc),
+        datetime(2026, 8, 27, 3, 0, tzinfo=UTC),
     )
 
     snapshot = result.forecast
@@ -128,7 +128,7 @@ def test_openweather_preserves_cloud_cover_pressure_and_exact_evidence() -> None
     result = client.collect(
         38.58,
         -121.49,
-        datetime.fromtimestamp(1787799600, tz=timezone.utc),
+        datetime.fromtimestamp(1787799600, tz=UTC),
         "test-key",
     )
 
@@ -142,7 +142,7 @@ def test_openweather_preserves_cloud_cover_pressure_and_exact_evidence() -> None
 
 
 def test_weather_snapshot_rejects_invalid_provider_values() -> None:
-    now = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
 
     with pytest.raises(ValueError, match="cloud_cover_pct"):
         ForecastSnapshot(

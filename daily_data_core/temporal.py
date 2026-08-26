@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def require_aware(value: datetime, label: str) -> None:
@@ -13,7 +13,7 @@ def require_aware(value: datetime, label: str) -> None:
 
 def as_utc(value: datetime) -> datetime:
     require_aware(value, "timestamp")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from daily_data_core.http import JsonHttpClient
@@ -164,7 +164,7 @@ def _timestamp(value: object, label: str) -> datetime:
         raise WeatherProviderSchemaError(f"{label} must be ISO-8601") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise WeatherProviderSchemaError(f"{label} must be timezone-aware")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _object(value: object, label: str) -> dict[str, object]:
@@ -232,7 +232,7 @@ class NwsWeatherClient:
             f"https://api.weather.gov/points/{latitude:.4f},{longitude:.4f}",
             headers=self.headers,
         )
-        point_observed_at = datetime.now(timezone.utc)
+        point_observed_at = datetime.now(UTC)
         point = _object(point_result.payload, "NWS point response")
         point_properties = _object(point.get("properties"), "NWS point properties")
         forecast_url = point_properties.get("forecastHourly")
@@ -240,7 +240,7 @@ class NwsWeatherClient:
             raise WeatherProviderSchemaError("NWS point response missing forecastHourly")
 
         forecast_result = self.http.get_json(forecast_url, headers=self.headers)
-        forecast_observed_at = datetime.now(timezone.utc)
+        forecast_observed_at = datetime.now(UTC)
         forecast = _object(forecast_result.payload, "NWS forecast response")
         properties = _object(forecast.get("properties"), "NWS forecast properties")
         periods = [
@@ -250,7 +250,7 @@ class NwsWeatherClient:
         if not periods:
             raise WeatherProviderSchemaError("NWS hourly forecast contains no periods")
 
-        target_utc = target_time.astimezone(timezone.utc)
+        target_utc = target_time.astimezone(UTC)
         selected = min(
             periods,
             key=lambda period: abs(
@@ -333,7 +333,7 @@ class OpenWeatherClient:
                 "exclude": "minutely,daily,alerts",
             },
         )
-        observed_at = datetime.now(timezone.utc)
+        observed_at = datetime.now(UTC)
         root = _object(result.payload, "OpenWeather response")
         hourly = [
             _object(item, "OpenWeather hourly item")
@@ -343,7 +343,7 @@ class OpenWeatherClient:
             raise WeatherProviderSchemaError(
                 "OpenWeather response contains no hourly forecasts"
             )
-        target_epoch = target_time.astimezone(timezone.utc).timestamp()
+        target_epoch = target_time.astimezone(UTC).timestamp()
         selected = min(
             hourly,
             key=lambda item: abs(
@@ -363,7 +363,7 @@ class OpenWeatherClient:
                 short_forecast = description if isinstance(description, str) else None
         snapshot = ForecastSnapshot(
             provider_id="openweather",
-            forecast_time=datetime.fromtimestamp(epoch, tz=timezone.utc),
+            forecast_time=datetime.fromtimestamp(epoch, tz=UTC),
             observed_at=observed_at,
             available_at=observed_at,
             provider_updated_at=None,

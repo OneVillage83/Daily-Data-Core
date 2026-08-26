@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from daily_data_core.odds import (
     BookmakerSnapshot,
@@ -12,7 +12,7 @@ from daily_data_core.odds import (
 
 
 def _event() -> OddsEventSnapshot:
-    now = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
     return OddsEventSnapshot(
         provider_event_id="event-1",
         sport_key="americanfootball_nfl",

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from daily_data_core.http import redact_url
-from daily_data_core.providers import ProviderPayload
 from daily_data_core.provenance import FileSystemRawEvidenceStore, sha256_bytes
+from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import TemporalProvenance
 
 
 def test_temporal_provenance_enforces_awareness_and_order() -> None:
-    observed = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    observed = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
     provenance = TemporalProvenance(
         observed_at=observed,
         available_at=observed - timedelta(seconds=1),
@@ -33,7 +33,7 @@ def test_temporal_provenance_enforces_awareness_and_order() -> None:
 
 
 def test_raw_evidence_store_is_content_addressed_and_idempotent(tmp_path: Path) -> None:
-    now = datetime(2026, 8, 26, 18, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
     payload = ProviderPayload(
         content=b'{"ok":true}',
         content_type="application/json",
