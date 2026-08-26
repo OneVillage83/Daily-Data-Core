@@ -36,8 +36,21 @@ class WeatherProviderSchemaError(RuntimeError):
     pass
 
 
+def _validate_optional_finite(value: float | None, label: str) -> None:
+    if value is not None and not math.isfinite(value):
+        raise ValueError(f"{label} must be finite when present")
+
+
 @dataclass(frozen=True, slots=True)
 class ForecastSnapshot:
+    """Sport-neutral normalized forecast observation.
+
+    `source_metadata` carries provider-specific descriptive fields that are useful
+    to consumers but do not belong in the cross-provider numeric schema. The
+    tuple form keeps the snapshot immutable and serializable without allowing a
+    provider-specific dictionary to redefine core semantics.
+    """
+
     provider_id: str
     forecast_time: datetime
     observed_at: datetime
@@ -49,6 +62,9 @@ class ForecastSnapshot:
     wind_speed_mph: float | None
     wind_direction_deg: float | None
     short_forecast: str | None = None
+    cloud_cover_pct: float | None = None
+    pressure_hpa: float | None = None
+    source_metadata: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.provider_id.strip():
@@ -63,9 +79,22 @@ class ForecastSnapshot:
                 require_aware(value, label)
         if self.available_at > self.observed_at:
             raise ValueError("available_at cannot be later than observed_at")
+
+        for value, label in (
+            (self.temperature_f, "temperature_f"),
+            (self.humidity_pct, "humidity_pct"),
+            (self.precipitation_probability_pct, "precipitation_probability_pct"),
+            (self.wind_speed_mph, "wind_speed_mph"),
+            (self.wind_direction_deg, "wind_direction_deg"),
+            (self.cloud_cover_pct, "cloud_cover_pct"),
+            (self.pressure_hpa, "pressure_hpa"),
+        ):
+            _validate_optional_finite(value, label)
+
         for value, label in (
             (self.humidity_pct, "humidity_pct"),
             (self.precipitation_probability_pct, "precipitation_probability_pct"),
+            (self.cloud_cover_pct, "cloud_cover_pct"),
         ):
             if value is not None and not 0.0 <= value <= 100.0:
                 raise ValueError(f"{label} must be in [0, 100]")
@@ -73,6 +102,21 @@ class ForecastSnapshot:
             raise ValueError("wind_speed_mph cannot be negative")
         if self.wind_direction_deg is not None and not 0.0 <= self.wind_direction_deg < 360.0:
             raise ValueError("wind_direction_deg must be in [0, 360)")
+        if self.pressure_hpa is not None and self.pressure_hpa <= 0:
+            raise ValueError("pressure_hpa must be positive when present")
+        if self.short_forecast is not None and not self.short_forecast.strip():
+            raise ValueError("short_forecast cannot be blank when present")
+
+        metadata_keys = [key for key, _ in self.source_metadata]
+        if any(not key.strip() or not value.strip() for key, value in self.source_metadata):
+            raise ValueError("source_metadata keys and values must be nonblank")
+        if len(metadata_keys) != len(set(metadata_keys)):
+            raise ValueError("source_metadata keys must be unique")
+
+    def metadata_value(self, key: str) -> str | None:
+        """Return one provider-specific metadata value without exposing mutability."""
+
+        return next((value for metadata_key, value in self.source_metadata if metadata_key == key), None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +193,14 @@ def _raw_payload(
     )
 
 
+def _metadata_pairs(**values: object) -> tuple[tuple[str, str], ...]:
+    metadata: list[tuple[str, str]] = []
+    for key, value in values.items():
+        if isinstance(value, str) and value.strip():
+            metadata.append((key, value))
+    return tuple(metadata)
+
+
 class NwsWeatherClient:
     def __init__(self, http: HttpClient, user_agent: str) -> None:
         if not user_agent.strip():
@@ -186,10 +238,13 @@ class NwsWeatherClient:
         selected = min(
             periods,
             key=lambda period: abs(
-                (_timestamp(period.get("startTime"), "period.startTime") - target_utc).total_seconds()
+                (
+                    _timestamp(period.get("startTime"), "period.startTime") - target_utc
+                ).total_seconds()
             ),
         )
         direction = selected.get("windDirection")
+        wind_speed_text = selected.get("windSpeed")
         short_forecast = selected.get("shortForecast")
         provider_updated_at = None
         updated = properties.get("updated")
@@ -211,12 +266,17 @@ class NwsWeatherClient:
                 selected.get("probabilityOfPrecipitation")
             ),
             wind_speed_mph=parse_wind_speed(
-                selected.get("windSpeed") if isinstance(selected.get("windSpeed"), str) else None
+                wind_speed_text if isinstance(wind_speed_text, str) else None
             ),
             wind_direction_deg=(
                 CARDINAL_DEGREES.get(direction) if isinstance(direction, str) else None
             ),
             short_forecast=short_forecast if isinstance(short_forecast, str) else None,
+            source_metadata=_metadata_pairs(
+                wind_speed_text=wind_speed_text,
+                wind_direction_cardinal=direction,
+                forecast_office=point_properties.get("cwa"),
+            ),
         )
         return WeatherAcquisitionResult(
             forecast=snapshot,
@@ -293,6 +353,8 @@ class OpenWeatherClient:
             wind_speed_mph=_optional_float(selected.get("wind_speed")),
             wind_direction_deg=_optional_float(selected.get("wind_deg")),
             short_forecast=short_forecast,
+            cloud_cover_pct=_optional_float(selected.get("clouds")),
+            pressure_hpa=_optional_float(selected.get("pressure")),
         )
         return WeatherAcquisitionResult(
             forecast=snapshot,
@@ -310,7 +372,8 @@ def compare_forecasts(first: ForecastSnapshot, second: ForecastSnapshot) -> Weat
 
     temperature = delta(first.temperature_f, second.temperature_f)
     precipitation = delta(
-        first.precipitation_probability_pct, second.precipitation_probability_pct
+        first.precipitation_probability_pct,
+        second.precipitation_probability_pct,
     )
     wind = delta(first.wind_speed_mph, second.wind_speed_mph)
     disagreements = 0
