@@ -31,7 +31,10 @@ class RawEvidenceArtifact:
 @runtime_checkable
 class RawEvidenceStore(Protocol):
     def put(
-        self, provider_id: str, dataset_key: str, payload: ProviderPayload
+        self,
+        provider_id: str,
+        dataset_key: str,
+        payload: ProviderPayload,
     ) -> RawEvidenceArtifact: ...
 
 
@@ -39,14 +42,20 @@ def sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def evidence_id_for(provider_id: str, dataset_key: str, content_sha256: str) -> str:
+def evidence_id_for(
+    provider_id: str,
+    dataset_key: str,
+    content_sha256: str,
+) -> str:
     identity = f"{provider_id}\0{dataset_key}\0{content_sha256}".encode()
     return hashlib.sha256(identity).hexdigest()
 
 
 def _validate_segment(value: str, label: str) -> None:
     if _SAFE_SEGMENT.fullmatch(value) is None or value in {".", ".."}:
-        raise ValueError(f"{label} must be a nonblank filesystem-safe identifier")
+        raise ValueError(
+            f"{label} must be a nonblank filesystem-safe identifier"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +63,10 @@ class FileSystemRawEvidenceStore:
     root: Path
 
     def put(
-        self, provider_id: str, dataset_key: str, payload: ProviderPayload
+        self,
+        provider_id: str,
+        dataset_key: str,
+        payload: ProviderPayload,
     ) -> RawEvidenceArtifact:
         _validate_segment(provider_id, "provider_id")
         _validate_segment(dataset_key, "dataset_key")
@@ -70,7 +82,8 @@ class FileSystemRawEvidenceStore:
             existing = object_path.read_bytes()
             if existing != payload.content or sha256_bytes(existing) != digest:
                 raise RawEvidenceCollisionError(
-                    f"raw evidence collision at content-addressed path {object_path}"
+                    "raw evidence collision at content-addressed path "
+                    f"{object_path}"
                 ) from None
 
         return RawEvidenceArtifact(
