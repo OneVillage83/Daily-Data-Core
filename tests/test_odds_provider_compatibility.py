@@ -11,7 +11,9 @@ from daily_data_core.odds import OddsProviderSchemaError, TheOddsApiClient
 class SingleResultHttp:
     def __init__(self, result: JsonHttpResult) -> None:
         self.result = result
-        self.calls: list[tuple[str, dict[str, str] | None, dict[str, str] | None]] = []
+        self.calls: list[
+            tuple[str, dict[str, str] | None, dict[str, str] | None]
+        ] = []
 
     def get_json(
         self,
@@ -25,13 +27,19 @@ class SingleResultHttp:
 
 
 def _result(payload: object, *, raw: bytes | None = None) -> JsonHttpResult:
-    content = raw if raw is not None else json.dumps(payload, separators=(",", ":")).encode()
+    content = (
+        raw
+        if raw is not None
+        else json.dumps(payload, separators=(",", ":")).encode()
+    )
     assert isinstance(payload, (dict, list))
     return JsonHttpResult(
         payload=payload,
         content=content,
         content_type="application/json",
-        response_url="https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/",
+        response_url=(
+            "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/"
+        ),
         diagnostics=HttpRequestDiagnostics(
             request_status="success",
             status_code=200,
@@ -63,6 +71,7 @@ def _valid_event() -> dict[str, object]:
                 "markets": [
                     {
                         "key": "totals",
+                        "last_update": "2026-08-26T20:01:00Z",
                         "outcomes": [
                             {"name": "Over", "price": -110, "point": 8.5},
                             {"name": "Under", "price": -105, "point": 8.5},
@@ -87,6 +96,21 @@ def test_empty_list_is_valid_empty_slate_and_preserves_raw_bytes() -> None:
     assert result.quota["requests_remaining"] == "498"
 
 
+def test_market_and_bookmaker_timestamps_are_both_preserved() -> None:
+    client = TheOddsApiClient(  # type: ignore[arg-type]
+        SingleResultHttp(_result([_valid_event()]))
+    )
+
+    result = client.collect(sport_key="baseball_mlb", api_key="test-key")
+
+    bookmaker = result.events[0].bookmakers[0]
+    market = bookmaker.markets[0]
+    assert bookmaker.provider_updated_at is not None
+    assert bookmaker.provider_updated_at.isoformat() == "2026-08-26T20:00:00+00:00"
+    assert market.provider_updated_at is not None
+    assert market.provider_updated_at.isoformat() == "2026-08-26T20:01:00+00:00"
+
+
 def test_malformed_nested_elements_are_excluded_with_granular_warnings() -> None:
     event = _valid_event()
     bookmakers = event["bookmakers"]
@@ -102,7 +126,9 @@ def test_malformed_nested_elements_are_excluded_with_granular_warnings() -> None
 
     outcomes.append({"name": "Over", "price": "bad", "point": 9.0})
     markets.append({"key": "broken-market", "outcomes": "not-a-list"})
-    bookmakers.append({"key": "broken-book", "title": "Broken", "markets": "not-a-list"})
+    bookmakers.append(
+        {"key": "broken-book", "title": "Broken", "markets": "not-a-list"}
+    )
 
     raw = json.dumps([event], separators=(",", ":")).encode()
     http = SingleResultHttp(_result([event], raw=raw))
@@ -125,7 +151,9 @@ def test_malformed_nested_elements_are_excluded_with_granular_warnings() -> None
 
 def test_malformed_event_is_skipped_when_another_event_is_valid() -> None:
     payload: list[object] = [{"id": "broken"}, _valid_event()]
-    client = TheOddsApiClient(SingleResultHttp(_result(payload)))  # type: ignore[arg-type]
+    client = TheOddsApiClient(  # type: ignore[arg-type]
+        SingleResultHttp(_result(payload))
+    )
 
     result = client.collect(sport_key="baseball_mlb", api_key="test-key")
 
@@ -133,9 +161,26 @@ def test_malformed_event_is_skipped_when_another_event_is_valid() -> None:
     assert [warning.code for warning in result.warnings] == ["malformed_event"]
 
 
+def test_wrong_sport_event_is_rejected_as_malformed() -> None:
+    wrong_sport = _valid_event()
+    wrong_sport["sport_key"] = "americanfootball_nfl"
+    payload: list[object] = [wrong_sport, _valid_event()]
+    client = TheOddsApiClient(  # type: ignore[arg-type]
+        SingleResultHttp(_result(payload))
+    )
+
+    result = client.collect(sport_key="baseball_mlb", api_key="test-key")
+
+    assert len(result.events) == 1
+    assert result.events[0].sport_key == "baseball_mlb"
+    assert [warning.code for warning in result.warnings] == ["malformed_event"]
+
+
 def test_nonempty_all_invalid_payload_is_fatal() -> None:
     payload: list[object] = [{"id": "broken"}, "not-an-event"]
-    client = TheOddsApiClient(SingleResultHttp(_result(payload)))  # type: ignore[arg-type]
+    client = TheOddsApiClient(  # type: ignore[arg-type]
+        SingleResultHttp(_result(payload))
+    )
 
     with pytest.raises(OddsProviderSchemaError, match="no structurally valid events"):
         client.collect(sport_key="baseball_mlb", api_key="test-key")
