@@ -4,32 +4,47 @@ This file is the authoritative milestone certification record for Daily Data Cor
 
 | Milestone | Scope | Implementation | Certification | Evidence / blocker |
 |---|---|---|---|---|
-| DDC-0 | Architecture & ownership contract | Complete | PENDING | `DDC0-DDC5_ARCHITECTURE_CONFORMANCE_AUDIT.md`; current-head quality gates outstanding |
-| DDC-1 | Runtime, provenance, provider, HTTP foundation | Complete | PENDING | Earlier compile/test checkpoint passed; current expanded suite, Ruff/mypy, and compiled locks outstanding |
-| DDC-2 | Generic odds + market core | Complete | PENDING | MLB-derived compatibility coverage added; current-head quality gates outstanding |
-| DDC-3 | Weather core | Complete | PENDING | MLB weather field inventory incorporated; current-head quality gates outstanding |
-| DDC-4 | Venue/geospatial core | Complete | PENDING | finite-input hardening added; current-head quality gates outstanding |
-| DDC-5 | Travel/rest core | Complete | PENDING | timezone/value hardening added; current-head quality gates outstanding |
-| DDC-6 | Daily-MLB compatibility migration | Baseline/preparation in progress; no MLB runtime migration yet | NOT ELIGIBLE | `DDC6_MLB_MIGRATION_PLAN.md`; Daily-MLB draft PR #65 freezes the pre-DDC regression oracle |
-| DDC-7 | Daily-NFL integration migration | Not started | NOT ELIGIBLE | Follows DDC-6 compatibility proof; certified NFL contracts must be preserved |
-| DDC-8 | Daily-NCAAF integration | Architecture contract complete; implementation not started | NOT ELIGIBLE | Daily-NCAAF should consume certified DDC from its first implementation milestone |
+| DDC-0 | Architecture & ownership contract | Complete | **ARCHITECTURE-CERTIFIED** | Final conformance audit; hosted current-head quality/reproducibility gates passed 2026-08-26 |
+| DDC-1 | Runtime, provenance, provider, HTTP foundation | Complete | **ARCHITECTURE-CERTIFIED** | Python 3.12.14; exact-byte evidence; hash-locked install; pytest/Ruff/strict-mypy green |
+| DDC-2 | Generic odds + market core | Complete | **ARCHITECTURE-CERTIFIED** | MLB-derived compatibility suite; market/book timestamps; sport isolation; current-head gates green |
+| DDC-3 | Weather core | Complete | **ARCHITECTURE-CERTIFIED** | NWS/OpenWeather compatibility coverage including cloud/pressure/source metadata; current-head gates green |
+| DDC-4 | Venue/geospatial core | Complete | **ARCHITECTURE-CERTIFIED** | finite-input hardening and geometry regression coverage; current-head gates green |
+| DDC-5 | Travel/rest core | Complete | **ARCHITECTURE-CERTIFIED** | timezone/value hardening and recovery regression coverage; current-head gates green |
+| DDC-6 | Daily-MLB compatibility migration | Baseline frozen; runtime migration may begin | **IN PROGRESS** | `DDC6_MLB_MIGRATION_PLAN.md`; Daily-MLB draft PR #65 is the pre-DDC regression oracle |
+| DDC-7 | Daily-NFL integration migration | Not started | NOT ELIGIBLE | Begins after DDC-6 proves consumer compatibility; certified NFL contracts must be preserved |
+| DDC-8 | Daily-NCAAF integration | Architecture contract complete; implementation not started | NOT ELIGIBLE | Daily-NCAAF consumes certified DDC from its first implementation milestone |
 
-## Current blockers — 2026-08-26
-1. The current expanded pytest suite has not yet executed after the latest DDC-6 compatibility hardening.
-2. Ruff has not executed against the current branch in the available isolated runner.
-3. strict mypy has not executed against the current branch in the available isolated runner.
-4. compiled/hash-locked requirements have not yet been generated under the pinned Python 3.12/pip-tools toolchain.
-5. GitHub Actions workflow files are present, but GitHub currently reports no workflow/status checks for PR #1 or its head commits.
-6. The isolated execution runner cannot resolve external hosts, so it cannot clone the latest branch or install the missing quality tools.
+## Certification evidence — 2026-08-26
 
-## Historical execution checkpoint
-Before the DDC-6 compatibility expansion, the initial DDC-1 through DDC-5 foundation compiled successfully and its then-current regression suite reported **14 passed**. That evidence is retained in `DDC_LOCAL_VALIDATION_20260826.md` but is not treated as final validation of the current branch.
+Final hosted PR validation ran on GitHub Actions under **CPython 3.12.14**.
+
+Permanent CI contract:
+1. installs pinned bootstrap tooling (`pip==26.1.2`, `pip-tools==7.6.0`);
+2. installs `requirements-dev.txt` with `pip --require-hashes`;
+3. recompiles both dependency locks and requires zero Git diff;
+4. runs the complete pytest suite;
+5. runs Ruff;
+6. runs strict mypy.
+
+Final certification result:
+- hash-locked dependency installation: **PASS**;
+- runtime/development lock regeneration and drift check: **PASS**;
+- pytest: **28 passed**;
+- Ruff: **PASS — All checks passed**;
+- strict mypy: **PASS — no issues in 11 source files**.
+
+GitHub Actions run: `33009126114`, quality job `98310500803`.
+
+No unresolved DDC-0 through DDC-5 architecture violations remain in the final conformance audit.
 
 ## Release gate
-No sport repo may use a moving Git branch as its production DDC dependency. After certification, DDC is versioned and distributed as an immutable wheel release with recorded source commit/SHA-256. Each consumer compiles that exact release into its normal hash lock. See `PACKAGE_RELEASE_POLICY.md`.
+
+Architecture certification authorizes packaging; it does not authorize consumers to track a moving Git branch. DDC must now be released as an immutable versioned wheel with its source commit and wheel SHA-256 recorded. Each sport repository consumes that exact artifact through its normal hash-locked dependency process. See `PACKAGE_RELEASE_POLICY.md`.
 
 ## DDC-6 transition rule
-DDC-6 may proceed through architecture documentation, compatibility fixture creation, baseline freezing, and side-by-side adapter preparation while core certification is pending. Daily-MLB must **not** delete or replace the legacy shared implementation as the sole production path until DDC-0 through DDC-5 are architecture-certified and cross-path equivalence is proven.
+
+With DDC-0 through DDC-5 certified, DDC-6 may begin the production compatibility-adapter phases. Daily-MLB legacy shared code remains the regression oracle and must not be deleted until fixture equivalence, tiny real-provider validation, artifact/database compatibility, credential-safety checks, and Daily-MLB quality gates all pass.
 
 ## Promotion rule
-A row may move to `ARCHITECTURE-CERTIFIED` only after all required local/hosted quality gates pass and the conformance audit contains no unresolved architecture violations. Consumer migrations may use compatibility wrappers during transition, but duplicated legacy shared code is not removed until its relevant DDC contract is certified and regression-equivalent.
+
+Future milestones move to `ARCHITECTURE-CERTIFIED` only after their own required implementation, compatibility, point-in-time, quality, and conformance gates pass. Certification of the shared core does not waive sport-specific certification requirements.
