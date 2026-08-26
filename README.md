@@ -6,17 +6,17 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
-- DDC-0 Architecture & ownership contract: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-1 Runtime / provenance / provider / HTTP foundation: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-2 Generic odds + market core: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-3 Weather core: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-4 Venue / geospatial core: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-5 Travel / rest core: **IMPLEMENTED — CERTIFICATION PENDING**
-- DDC-6 Daily-MLB migration: **BASELINE / COMPATIBILITY PREPARATION IN PROGRESS; NO MLB RUNTIME REPLACEMENT YET**
+- DDC-0 Architecture & ownership contract: **ARCHITECTURE-CERTIFIED**
+- DDC-1 Runtime / provenance / provider / HTTP foundation: **ARCHITECTURE-CERTIFIED**
+- DDC-2 Generic odds + market core: **ARCHITECTURE-CERTIFIED**
+- DDC-3 Weather core: **ARCHITECTURE-CERTIFIED**
+- DDC-4 Venue / geospatial core: **ARCHITECTURE-CERTIFIED**
+- DDC-5 Travel / rest core: **ARCHITECTURE-CERTIFIED**
+- DDC-6 Daily-MLB migration: **IN PROGRESS — baseline frozen; package release and side-by-side runtime migration next**
 - DDC-7 Daily-NFL migration: planned after DDC-6 compatibility proof
 - DDC-8 Daily-NCAAF integration: planned as the first sport implementation built against certified DDC from day one
 
-The authoritative certification status is `docs/ARCHITECTURE_CERTIFICATION_LOG.md`. Implementation completion is not architecture certification.
+The authoritative milestone record is `docs/ARCHITECTURE_CERTIFICATION_LOG.md`.
 
 ## Ownership rule
 
@@ -46,7 +46,7 @@ Example: DDC can expose wind direction, speed, and a venue reference bearing. Da
 
 ## Package/release rule
 
-Production consumers do **not** depend on a moving Git branch. After architecture certification, DDC is released as a versioned pure-Python wheel attached to an immutable release/tag. Each sport repository consumes the exact wheel and compiles it into that repo's normal `--require-hashes` dependency lock.
+Production consumers do **not** depend on a moving Git branch. Certified DDC is distributed as a versioned pure-Python wheel attached to an immutable release/tag. Each sport repository consumes the exact wheel and compiles it into that repo's normal `--require-hashes` dependency lock.
 
 See `docs/PACKAGE_RELEASE_POLICY.md`.
 
@@ -56,24 +56,30 @@ See `docs/PACKAGE_RELEASE_POLICY.md`.
 - pytest
 - Ruff (`E`, `F`, `I`, `UP`, `B`)
 - strict mypy
-- reproducible dependency inputs/compiled hash locks
+- reproducible SHA-256 dependency locks
 - immutable provider evidence before normalization
 - explicit point-in-time semantics
 - provider-neutral core contracts
 
-## Current validation requirement
+## Certified validation
 
-The original DDC-1 through DDC-5 foundation had an earlier direct-execution checkpoint with Python compilation passing and 14 tests passing. The branch has since been expanded/hardened for Daily-MLB compatibility, so that earlier checkpoint is historical evidence only.
+Final hosted certification ran under **CPython 3.12.14** with the permanent CI contract:
 
-Before certification, rerun on the current branch under Python 3.12:
+1. pinned pip/pip-tools bootstrap;
+2. `pip install --require-hashes -r requirements-dev.txt`;
+3. dependency-lock regeneration with zero-diff enforcement;
+4. pytest;
+5. Ruff;
+6. strict mypy.
 
-```powershell
-python -m pytest -q
-python -m ruff check .
-python -m mypy .
-```
+Certification result:
+- hash-locked install: **PASS**;
+- lock-drift verification: **PASS**;
+- pytest: **28 passed**;
+- Ruff: **PASS**;
+- strict mypy: **PASS — 11 source files**.
 
-Then generate/install the compiled hash locks and rerun the same gates. See `docs/DDC_LOCAL_VALIDATION_20260826.md` for the exact certification sequence.
+See `docs/DDC_LOCAL_VALIDATION_20260826.md` and `docs/DDC0-DDC5_ARCHITECTURE_CONFORMANCE_AUDIT.md`.
 
 ## Governing documents
 
@@ -90,4 +96,4 @@ Then generate/install the compiled hash locks and rerun the same gates. See `doc
 
 ## Consumer migration safety
 
-Daily-MLB's legacy shared implementation remains the regression oracle during DDC-6. DDC-backed adapters may be developed side-by-side, but legacy MLB shared code is not removed until DDC is certified, the immutable package release is hash-locked by MLB, fixture equivalence is proven, a tiny real-provider validation passes, and the MLB quality gates remain green.
+Daily-MLB's legacy shared implementation remains the regression oracle during DDC-6. DDC-backed adapters may be developed side-by-side, but legacy MLB shared code is not removed until the immutable DDC package release is hash-locked by MLB, fixture equivalence is proven, a tiny real-provider validation passes, artifact/database contracts remain compatible, credential-safety checks pass, and the MLB quality gates remain green.
