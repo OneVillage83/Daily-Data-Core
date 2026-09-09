@@ -10,7 +10,13 @@ certification remains a retained record, but it does not prove conformance to th
 September consumer or the newly tested temporal/security cases below.
 
 DDC parent: `c4eee2245753aff22f5968da08db62b8259905a0` (`main`). Work branch:
-`codex/ddc6-mlb-migration-20260909`. MLB work is a descendant of its current
+`codex/ddc6-mlb-migration-20260909`. Locally tested implementation:
+`fdfddcf710248a0836d9501648e42e3945330685`; draft PR
+https://github.com/OneVillage83/Daily-Data-Core/pull/4. The final receipt is a
+documentation-only successor; its SHA is available from Git/PR head. A rebuild
+from the committed source retained the candidate wheel hash below. Tracked source
+scan passed 44 files with zero findings/errors and no configured secrets supplied.
+MLB work is a descendant of its current
 documentation receipt, preserving its unmerged PR stack; no production release,
 tag move, asset replacement, model permission or consumer switch occurred.
 
