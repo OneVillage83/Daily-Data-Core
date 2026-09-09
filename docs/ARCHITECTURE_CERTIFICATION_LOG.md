@@ -2,6 +2,13 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+Updated: 2026-09-09T16:49:00-07:00 (America/Los_Angeles).
+The historical certifications below remain recorded; newly demonstrated NWS URL,
+DST/temporal and venue validation defects require a new release. Candidate fixes
+are locally tested, not certified. Current DDC-6 is blocked on provider/evidence
+admission; see `DDC6_RELEASE_ADMISSION_20260909.md`. Do not interpret the historical
+"no unresolved violations" statement as covering the newly discovered cases.
+
 | Milestone | Scope | Implementation | Certification | Evidence / blocker |
 |---|---|---|---|---|
 | DDC-0 | Architecture & ownership contract | Complete | **ARCHITECTURE-CERTIFIED** | Final conformance audit; hosted current-head quality/reproducibility gates passed 2026-08-26 |

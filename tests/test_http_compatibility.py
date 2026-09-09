@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import cast
 
 import pytest
 import requests
 
-import daily_data_core.http as http_module
 from daily_data_core.http import HttpClient, HttpError
 
 SECRET = "ddc-http-secret"
@@ -75,7 +75,7 @@ def _client(
 
 def test_retry_after_is_respected_and_capped(monkeypatch: pytest.MonkeyPatch) -> None:
     sleeps: list[float] = []
-    monkeypatch.setattr(http_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
     client, session = _client(
         [
             _response(429, {}, headers={"Retry-After": "99"}),
@@ -96,7 +96,7 @@ def test_connection_and_timeout_failures_retry_with_backoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
-    monkeypatch.setattr(http_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
     client, session = _client(
         [
             requests.ConnectionError("connection"),
@@ -117,7 +117,7 @@ def test_permanent_http_error_is_not_retried_and_redacts_secret_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
-    monkeypatch.setattr(http_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
     response_url = f"https://example.test/resource?apiKey={SECRET}&regions=us"
     client, session = _client(
         [
@@ -147,7 +147,7 @@ def test_permanent_http_error_is_not_retried_and_redacts_secret_url(
 
 def test_invalid_json_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     sleeps: list[float] = []
-    monkeypatch.setattr(http_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
     response = _response(200, {})
     response._content = b"not-json"
     client, session = _client([response])

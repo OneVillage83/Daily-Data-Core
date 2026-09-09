@@ -34,9 +34,9 @@ class TemporalProvenance:
         ):
             if value is not None:
                 require_aware(value, label)
-        if self.available_at > self.observed_at:
+        if as_utc(self.available_at) > as_utc(self.observed_at):
             raise ValueError("available_at cannot be later than observed_at")
 
     def eligible_at(self, cutoff: datetime) -> bool:
         require_aware(cutoff, "cutoff")
-        return self.available_at <= cutoff
+        return as_utc(self.available_at) <= as_utc(cutoff)

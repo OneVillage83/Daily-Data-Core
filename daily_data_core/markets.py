@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from statistics import fmean, pstdev
 
-from daily_data_core.temporal import require_aware
+from daily_data_core.temporal import as_utc, require_aware
 
 
 class MarketKind(StrEnum):
@@ -118,7 +118,7 @@ def classify_freshness(
     if provider_updated_at is None:
         return FreshnessStatus.UNKNOWN
     require_aware(provider_updated_at, "provider_updated_at")
-    age = (observed_at - provider_updated_at).total_seconds()
+    age = (as_utc(observed_at) - as_utc(provider_updated_at)).total_seconds()
     if age < -active_thresholds.future_tolerance_seconds:
         return FreshnessStatus.UNKNOWN
     age = max(age, 0.0)

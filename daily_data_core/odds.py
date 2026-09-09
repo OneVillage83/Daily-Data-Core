@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
-from daily_data_core.http import HttpClient, HttpRequestDiagnostics
+from daily_data_core.http import HttpRequestDiagnostics, JsonHttpClient
 from daily_data_core.markets import TwoWayOffer
 from daily_data_core.providers import ProviderPayload
-from daily_data_core.temporal import TemporalProvenance, require_aware
+from daily_data_core.temporal import TemporalProvenance, as_utc, require_aware
 
 THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 PROVIDER_ID = "the_odds_api"
@@ -111,7 +111,7 @@ class OddsEventSnapshot:
         require_aware(self.commence_time, "commence_time")
         require_aware(self.observed_at, "observed_at")
         require_aware(self.available_at, "available_at")
-        if self.available_at > self.observed_at:
+        if as_utc(self.available_at) > as_utc(self.observed_at):
             raise ValueError("available_at cannot be later than observed_at")
 
 
@@ -414,7 +414,7 @@ def group_two_way_offers(
 
 
 class TheOddsApiClient:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: JsonHttpClient) -> None:
         self.http = http
 
     def collect(

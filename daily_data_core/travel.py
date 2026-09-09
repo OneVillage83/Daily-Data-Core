@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from daily_data_core.temporal import require_aware
@@ -32,7 +32,7 @@ class TravelSegment:
     def __post_init__(self) -> None:
         require_aware(self.departed_at, "departed_at")
         require_aware(self.arrived_at, "arrived_at")
-        if self.arrived_at < self.departed_at:
+        if self.arrived_at.astimezone(UTC) < self.departed_at.astimezone(UTC):
             raise ValueError("arrived_at cannot precede departed_at")
         _zone(self.origin_timezone, "origin_timezone")
         _zone(self.destination_timezone, "destination_timezone")
@@ -43,7 +43,9 @@ class TravelSegment:
 
     @property
     def elapsed_hours(self) -> float:
-        return (self.arrived_at - self.departed_at).total_seconds() / 3600.0
+        return (
+            self.arrived_at.astimezone(UTC) - self.departed_at.astimezone(UTC)
+        ).total_seconds() / 3600.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,9 +93,11 @@ def exact_rest_hours(
 ) -> float:
     require_aware(previous_event_end, "previous_event_end")
     require_aware(next_event_start, "next_event_start")
-    if next_event_start < previous_event_end:
+    previous_utc = previous_event_end.astimezone(UTC)
+    next_utc = next_event_start.astimezone(UTC)
+    if next_utc < previous_utc:
         raise ValueError("next_event_start cannot precede previous_event_end")
-    return (next_event_start - previous_event_end).total_seconds() / 3600.0
+    return (next_utc - previous_utc).total_seconds() / 3600.0
 
 
 def build_recovery_context(

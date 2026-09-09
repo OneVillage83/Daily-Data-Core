@@ -86,7 +86,7 @@ def _valid_event() -> dict[str, object]:
 def test_empty_list_is_valid_empty_slate_and_preserves_raw_bytes() -> None:
     raw = b"[ ]\n"
     http = SingleResultHttp(_result([], raw=raw))
-    client = TheOddsApiClient(http)  # type: ignore[arg-type]
+    client = TheOddsApiClient(http)
 
     result = client.collect(sport_key="baseball_mlb", api_key="test-key")
 
@@ -97,7 +97,7 @@ def test_empty_list_is_valid_empty_slate_and_preserves_raw_bytes() -> None:
 
 
 def test_market_and_bookmaker_timestamps_are_both_preserved() -> None:
-    client = TheOddsApiClient(  # type: ignore[arg-type]
+    client = TheOddsApiClient(
         SingleResultHttp(_result([_valid_event()]))
     )
 
@@ -132,7 +132,7 @@ def test_malformed_nested_elements_are_excluded_with_granular_warnings() -> None
 
     raw = json.dumps([event], separators=(",", ":")).encode()
     http = SingleResultHttp(_result([event], raw=raw))
-    client = TheOddsApiClient(http)  # type: ignore[arg-type]
+    client = TheOddsApiClient(http)
 
     result = client.collect(sport_key="baseball_mlb", api_key="test-key")
 
@@ -151,7 +151,7 @@ def test_malformed_nested_elements_are_excluded_with_granular_warnings() -> None
 
 def test_malformed_event_is_skipped_when_another_event_is_valid() -> None:
     payload: list[object] = [{"id": "broken"}, _valid_event()]
-    client = TheOddsApiClient(  # type: ignore[arg-type]
+    client = TheOddsApiClient(
         SingleResultHttp(_result(payload))
     )
 
@@ -165,7 +165,7 @@ def test_wrong_sport_event_is_rejected_as_malformed() -> None:
     wrong_sport = _valid_event()
     wrong_sport["sport_key"] = "americanfootball_nfl"
     payload: list[object] = [wrong_sport, _valid_event()]
-    client = TheOddsApiClient(  # type: ignore[arg-type]
+    client = TheOddsApiClient(
         SingleResultHttp(_result(payload))
     )
 
@@ -178,7 +178,7 @@ def test_wrong_sport_event_is_rejected_as_malformed() -> None:
 
 def test_nonempty_all_invalid_payload_is_fatal() -> None:
     payload: list[object] = [{"id": "broken"}, "not-an-event"]
-    client = TheOddsApiClient(  # type: ignore[arg-type]
+    client = TheOddsApiClient(
         SingleResultHttp(_result(payload))
     )
 
@@ -188,7 +188,7 @@ def test_nonempty_all_invalid_payload_is_fatal() -> None:
 
 def test_request_contract_is_sport_configurable_and_american() -> None:
     http = SingleResultHttp(_result([]))
-    client = TheOddsApiClient(http)  # type: ignore[arg-type]
+    client = TheOddsApiClient(http)
 
     client.collect(
         sport_key="americanfootball_ncaaf",

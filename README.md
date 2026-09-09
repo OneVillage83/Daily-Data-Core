@@ -12,11 +12,16 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 - DDC-3 Weather core: **ARCHITECTURE-CERTIFIED**
 - DDC-4 Venue / geospatial core: **ARCHITECTURE-CERTIFIED**
 - DDC-5 Travel / rest core: **ARCHITECTURE-CERTIFIED**
-- DDC-6 Daily-MLB migration: **IN PROGRESS — baseline frozen; package release and side-by-side runtime migration next**
+- DDC-6 Daily-MLB migration: **BLOCKED — current-consumer release admission exposes provider/evidence gaps; safe core repairs prepared, consumer not switched**
 - DDC-7 Daily-NFL migration: planned after DDC-6 compatibility proof
 - DDC-8 Daily-NCAAF integration: planned as the first sport implementation built against certified DDC from day one
 
 The authoritative milestone record is `docs/ARCHITECTURE_CERTIFICATION_LOG.md`.
+
+September 9 follow-up: see `docs/DDC6_RELEASE_ADMISSION_20260909.md` for tested
+v0.1.0 counterexamples, unreleased v0.1.1.dev1 safety fixes, remaining admission
+failures and the exact continuation. Historical certification is not a new
+consumer-equivalence or release claim for this candidate.
 
 ## Ownership rule
 

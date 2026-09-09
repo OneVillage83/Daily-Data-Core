@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class RoofType(StrEnum):
@@ -45,6 +46,10 @@ class Venue:
             or not self.timezone_name.strip()
         ):
             raise ValueError("venue_id, name, and timezone_name cannot be blank")
+        try:
+            ZoneInfo(self.timezone_name)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("timezone_name is not a known timezone") from exc
         if self.reference_bearing_deg is not None and (
             not math.isfinite(self.reference_bearing_deg)
             or not 0.0 <= self.reference_bearing_deg < 360.0

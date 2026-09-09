@@ -1,7 +1,12 @@
 # DDC-6 — Daily-MLB Compatibility Migration Plan
 
 Date: 2026-08-26
-Status: **PLANNED — MAY PREPARE, MUST NOT DELETE LEGACY SHARED CODE BEFORE DDC-0–DDC-5 CERTIFICATION**
+Status: **BLOCKED — current consumer needs a compatible shared release before switching**
+
+Updated: 2026-09-09T16:49:00-07:00 (America/Los_Angeles).
+See `DDC6_RELEASE_ADMISSION_20260909.md`. The plan below remains the migration
+sequence; its August baseline is historical and must be reconciled with current
+MLB output/evidence semantics. Legacy remains active and is not retired.
 
 ## Goal
 Move Daily-MLB from owning sport-agnostic acquisition/transport primitives to consuming `daily-data-core` while preserving every current Daily-MLB production contract, historical behavior, regression expectation, and artifact shape.

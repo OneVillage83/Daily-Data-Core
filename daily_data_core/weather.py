@@ -7,10 +7,11 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
+from urllib.parse import urlsplit
 
 from daily_data_core.http import JsonHttpClient
 from daily_data_core.providers import ProviderPayload
-from daily_data_core.temporal import TemporalProvenance, require_aware
+from daily_data_core.temporal import TemporalProvenance, as_utc, require_aware
 
 CARDINAL_DEGREES: dict[str, float] = {
     "N": 0.0,
@@ -34,6 +35,33 @@ CARDINAL_DEGREES: dict[str, float] = {
 
 class WeatherProviderSchemaError(RuntimeError):
     pass
+
+
+def validated_nws_hourly_url(value: object) -> str:
+    """Restrict provider-directed requests to the NWS hourly endpoint."""
+    if not isinstance(value, str) or not value.strip():
+        raise WeatherProviderSchemaError("NWS point response missing forecastHourly")
+    url = value.strip()
+    try:
+        parts = urlsplit(url)
+        trusted = (
+            parts.scheme == "https"
+            and parts.hostname == "api.weather.gov"
+            and parts.username is None
+            and parts.password is None
+            and parts.port in {None, 443}
+            and not parts.query
+            and not parts.fragment
+            and re.fullmatch(
+                r"/gridpoints/[A-Z0-9]{3}/[0-9]+,[0-9]+/forecast/hourly", parts.path
+            ) is not None
+        )
+    except ValueError:
+        trusted = False
+    if not trusted:
+        # Never echo provider-controlled URLs, userinfo, or query credentials.
+        raise WeatherProviderSchemaError("NWS point response has untrusted forecastHourly URL")
+    return url
 
 
 def _validate_optional_finite(value: float | None, label: str) -> None:
@@ -77,7 +105,7 @@ class ForecastSnapshot:
         ):
             if timestamp_value is not None:
                 require_aware(timestamp_value, label)
-        if self.available_at > self.observed_at:
+        if as_utc(self.available_at) > as_utc(self.observed_at):
             raise ValueError("available_at cannot be later than observed_at")
 
         for numeric_value, label in (
@@ -235,9 +263,7 @@ class NwsWeatherClient:
         point_observed_at = datetime.now(UTC)
         point = _object(point_result.payload, "NWS point response")
         point_properties = _object(point.get("properties"), "NWS point properties")
-        forecast_url = point_properties.get("forecastHourly")
-        if not isinstance(forecast_url, str) or not forecast_url:
-            raise WeatherProviderSchemaError("NWS point response missing forecastHourly")
+        forecast_url = validated_nws_hourly_url(point_properties.get("forecastHourly"))
 
         forecast_result = self.http.get_json(forecast_url, headers=self.headers)
         forecast_observed_at = datetime.now(UTC)
