@@ -2,6 +2,18 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03D operator certification: 2026-09-09T21:16:47-07:00 (America/Los_Angeles).
+Candidate **0.2.0.dev4** at source `3ec5b7a1d39abadac7fa76348f0c2f943f882e7e`,
+tree `829ac070b2e11993346a119dcc5b6ad169845e9a`, is
+**CERTIFIED-FOR-TDL-03B-RESUME**. Tree-identical CI descendant
+`895a6546d5754b5052215cfaaeedcceabc1fb000` passed workflow run `34436406742`,
+quality job `102742266899`, including hash-locked install, zero-drift locks,
+114 tests, Ruff and strict mypy. Two clean builds reproduced wheel SHA-256
+`3a3cf828b9e858e2aaba1dc2b41832109c278a435b3952285a43c9d17bc5169e`;
+all redirect/replay/admission/equivalence and MLB oracle gates passed. See the TDL-03D
+handoff for the complete receipt. This permits the governed TDL-03B sequence to
+resume; it is not a release, merge or consumer-switch authorization by itself.
+
 TDL-03D update: 2026-09-09T20:58:11-07:00 (America/Los_Angeles).
 The redirect defect below is repaired locally in **0.2.0.dev4**: immutable
 LogicalCall -> PhysicalAttempt -> HttpExchange, explicit redirect security and

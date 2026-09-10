@@ -200,3 +200,42 @@ continuation, not authorized for immediate release/cutover.** No new architectur
 blocker remains. No live-provider, remote-CI, Docker, full MLB-suite, release or
 production-migration certification is claimed here. Scientific permissions, model
 promotion, PIT authority, Recommendation Gate thresholds and registries are unchanged.
+
+## Operator certification receipt — 2026-09-09T21:16:47-07:00
+
+**Disposition: CERTIFIED-FOR-TDL-03B-RESUME.** The authoritative DDC source is
+`3ec5b7a1d39abadac7fa76348f0c2f943f882e7e`, exact Git tree
+`829ac070b2e11993346a119dcc5b6ad169845e9a`. Branch, clean worktree, dev4 metadata,
+ancestry and recorded lock hashes were independently verified. The tree-identical
+CI-only descendant is `895a6546d5754b5052215cfaaeedcceabc1fb000`; its tree is also
+`829ac070b2e11993346a119dcc5b6ad169845e9a`. It changes no candidate content.
+
+Two new clean Git-archive builds from the authoritative source reproduced wheel
+`daily_data_core-0.2.0.dev4-py3-none-any.whl`, SHA-256
+`3a3cf828b9e858e2aaba1dc2b41832109c278a435b3952285a43c9d17bc5169e`.
+Fresh `--require-hashes` installation imported version 0.2.0.dev4 from isolated
+site-packages with no editable/source fallback; **114 installed-wheel tests** and
+`pip check` passed. Source validation passed **114 tests**, Ruff, workflow-scope
+strict mypy **14 files**, and expanded strict mypy **26 files**.
+
+Exact-wheel gates passed: redirect **8/8** with statuses 302,200, one attempt, two
+exchanges and network calls 0; persisted replay **10/10** with replay calls 0;
+admission **7/7** and legacy/wheel equivalence **80/80**, both with provider calls 0.
+The retained private MLB oracle passed **119 tests**; full MLB Ruff and strict mypy
+**766 files** passed. Lock regeneration produced zero diff. Vulnerability audit found
+no known vulnerabilities. Secret scans passed 56 DDC and 1,058 MLB tracked files
+with no findings/errors and no configured secret values loaded.
+
+Hosted DDC workflow **CI** run **34436406742**, quality job **102742266899**, tested
+CI commit `895a6546d5754b5052215cfaaeedcceabc1fb000` on Ubuntu with CPython 3.12.14.
+Hash-locked dependency installation, both lock regenerations/diff check, **114 tests
+in 3.44s**, Ruff and strict mypy **14 source files** all completed successfully; no
+required workflow step was skipped. Run:
+`https://github.com/OneVillage83/Daily-Data-Core/actions/runs/34436406742`.
+
+Docker is **NOT APPLICABLE**: DDC remains a pure-Python wheel project with no
+Dockerfile, Compose file, container workflow or container requirement in its release
+policy. This receipt certifies the dev4 candidate for the existing TDL-03B governed
+main/certification/release and consumer-admission sequence. It does not itself merge,
+release or authorize an immediate MLB switch. MLB production code/dependencies remain
+unchanged. Scientific authority remains **0 AVAILABLE / 5 BLOCKED / 22 MISSING**.
