@@ -1,5 +1,10 @@
 # DDC-6 current-consumer release admission
 
+Current disposition: the TDL-03A successor resolves the three gaps below and admits
+the unreleased 0.2.0.dev1 candidate locally. See
+[TDL03A_CANDIDATE_HANDOFF_20260909.md](TDL03A_CANDIDATE_HANDOFF_20260909.md).
+The remainder of this file is the retained pre-TDL-03A evidence record.
+
 Updated: 2026-09-09T16:49:00-07:00 (America/Los_Angeles).
 
 ## Disposition
