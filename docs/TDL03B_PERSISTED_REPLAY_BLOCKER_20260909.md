@@ -1,5 +1,9 @@
 # TDL-03B persisted acquisition replay blocker
 
+Historical finding for 0.2.0.dev1. The bounded repair and new candidate evidence are
+recorded in [TDL-03C](TDL03C_LOGICAL_CALL_REPLAY_HANDOFF_20260909.md); the original
+counterexample below remains valid for the retained old artifact.
+
 Updated: 2026-09-09T18:40:55-07:00 (America/Los_Angeles).
 
 **TDL-03B BLOCKED on a newly demonstrated shared acquisition/error/replay contract

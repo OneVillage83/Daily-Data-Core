@@ -59,6 +59,10 @@ DDC may calculate route-independent neutral facts such as haversine distance, ti
 ## Provider/evidence contract
 Provider adapters emit exact bytes first. Normalization never becomes the only copy of source evidence. Sanitized/public/report artifacts are a separate concern and may have their own versioned compatibility contract.
 
+Candidate 0.2.0.dev2 adds immutable logical-call/physical-attempt history and explicit
+strict replay versus reprocess. See [TDL-03C contract and handoff](TDL03C_LOGICAL_CALL_REPLAY_HANDOFF_20260909.md).
+The existing response-only replay API does not certify acquisition-history replay.
+
 ## Package-consumption contract
 Production sport consumers install DDC from an immutable versioned wheel release, not a moving branch. The released source commit and wheel SHA-256 are recorded, and each sport repo compiles the exact DDC artifact into its own normal `--require-hashes` dependency lock.
 

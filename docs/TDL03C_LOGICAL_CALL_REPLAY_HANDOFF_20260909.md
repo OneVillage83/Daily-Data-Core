@@ -75,3 +75,61 @@ lock, model permission, registry, PIT rule or Recommendation Gate threshold chan
 Scientific inventory remains **0 AVAILABLE / 5 BLOCKED / 22 MISSING**.
 Release policy still requires an architecture-certified main commit and immutable
 published artifact before production adapters/cutover. Remote CI is delegated.
+
+## Completed local receipt
+
+Implementation commit: `5bfab0e6eb8269ad1c90d657650375569bf5f702`.
+New candidate: `daily_data_core-0.2.0.dev2-py3-none-any.whl`.
+SHA-256: `f8831a6f4f1a726b41d1b72a4b7196cf1e100fd8b41d7137786452005a7e6a5a`.
+Two independent empty build directories extracted from the committed Git archive
+produced this identical digest with `SOURCE_DATE_EPOCH=1787788800`, Python 3.12.10,
+pip 26.2, pip-tools 7.6.1, build 1.5.0, setuptools 83.0.0 and wheel 0.48.0.
+Wheel contents contain only package code, py.typed and distribution metadata.
+
+- DDC source: **85 passed**; Ruff pass; strict mypy **24 files**.
+- Fresh hash-locked development environment plus exact wheel: install pass;
+  `python -I -m pytest -q -c pytest.ini --import-mode=importlib` from an isolated
+  tests-only directory: **85 passed**. A conftest assertion verifies imports come
+  from site-packages and version 0.2.0.dev2, preventing source-tree fallback.
+- `pip check`: no broken requirements. Pinned runtime/dev lock regeneration:
+  zero Git diff. Hash-locked dev audit: no known vulnerabilities.
+- MLB exact-wheel admission: **7/7**; current-legacy comparisons: **80/80**.
+- Persisted replay admission v2: **10/10**, strict replay network calls **0**;
+  successful 503-to-200 replay preserves two attempts and original evidence;
+  schema-error replay preserves the same history, quota and diagnostics.
+- Old dev1 recheck still exits **1**. The original five missing requirements are
+  not waived; v2 adds error replay, identity and network enforcement assertions.
+- Retained MLB oracle: **119 passed**; full Ruff pass; strict mypy **765 files**.
+- Pre-commit DDC secret scan: **52 tracked files**, zero findings; final documentation
+  does not add tracked files. Generated wheels/logs and synthetic receipts stay ignored.
+
+MLB receipt paths (local ignored `.validation/`): `tdl03c-admission.json`,
+`tdl03c-equivalence.json`, `tdl03c-replay.json`, `tdl03c-before.json` and
+`tdl03c-old-wheel-control.json`. These are contract fixtures, not real provider data.
+No Docker, live-provider check, remote Actions, release or cutover was executed.
+
+## Exact next validation handoff
+
+A lower-cost validation agent should verify this branch's final documentation head
+descends from the implementation commit with documentation-only differences, then
+run `.github/workflows/ci.yml` on that exact DDC head under Python 3.12 and its pinned
+bootstrap/hashed locks. Record run/job IDs, lock regeneration, pytest/Ruff/strict-mypy
+and security results. Rebuild from a clean Git archive with the toolchain/epoch above
+and verify the wheel digest. In the private MLB validation checkout run the three
+scripts below with `--wheel <rebuilt-wheel> --sha256 <digest-above>`:
+
+```text
+python -m scripts.check_ddc6_release
+python -m scripts.compare_ddc6_candidate
+python -m scripts.check_ddc6_failure_replay
+```
+
+Re-run the 119-test oracle group named in the private TDL-03C handoff. Do not retry
+private Actions billing failures; never copy excluded MLB implementation/evidence
+into a public CI mirror. Report exact scope and limitations. Return substantive
+acquisition/PIT/evidence/security failures to Astra; handle mechanical runner issues
+without changing production behavior. No merge/release/cutover is authorized here.
+
+**TDL-03C COMPLETE locally. TDL-03B READY to resume** its existing certification,
+immutable-release and consumer-adapter admission sequence. Release certification,
+real-provider checks and eventual consumer migration remain future work.
