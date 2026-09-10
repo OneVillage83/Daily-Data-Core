@@ -1,5 +1,9 @@
 # Lossless acquisition contract v2
 
+TDL-03F clarification: `TDL03F_OPTIONAL_DESCRIPTION_20260910.md` governs canonical
+optional quote description and parser-v3 interpretation. Required fields, raw
+evidence, independently valid siblings and strict history matching remain enforced.
+
 TDL-03A evolves the unreleased candidate to `0.2.0.dev1`. This minor development
 version reflects a new shared evidence contract. Published 0.1.0 and the retained
 0.1.1.dev1 artifact are unchanged. No production release or consumer switch is authorized.

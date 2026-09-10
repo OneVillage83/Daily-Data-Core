@@ -6,6 +6,11 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
+Latest: TDL-03F optional-description repair is locally COMPLETE; persisted and
+strict-replay consumer admission PASS. TDL-03B-FINAL resume is READY, not released
+or cut over. Candidate 0.2.2.dev1 and exact evidence:
+`docs/TDL03F_OPTIONAL_DESCRIPTION_20260910.md`. Entries below are historical.
+
 TDL-03B-FINAL resume, 2026-09-10T15:02:08-07:00 (America/Los_Angeles): private
 MLB infrastructure certification cleared, but actual persisted odds admission
 exposes a new optional-description outcome-retention difference. Final 0.2.1 is

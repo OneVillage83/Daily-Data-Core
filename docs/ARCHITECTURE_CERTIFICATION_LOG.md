@@ -2,6 +2,11 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03F, 2026-09-10: local repair/admission COMPLETE; persisted equivalence and
+strict replay PASS, TDL-03B-FINAL resume READY. This is NOT new remote CI or
+production certification. Exact successor 0.2.2.dev1 evidence and scope are in
+`TDL03F_OPTIONAL_DESCRIPTION_20260910.md`. Earlier failed artifact remains rejected.
+
 TDL-03B-FINAL resume: 2026-09-10T15:02:08-07:00 (America/Los_Angeles).
 Private MLB certification cleared the infrastructure blocker. Final 0.2.1
 prepared from the current certified successor passes source/installed-package and

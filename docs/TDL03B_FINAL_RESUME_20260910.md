@@ -1,5 +1,9 @@
 # TDL-03B-FINAL governed release resume
 
+Successor: `TDL03F_OPTIONAL_DESCRIPTION_20260910.md` locally clears this blocker
+with new 0.2.2.dev1 bytes. Resume READY; no release/cutover. The failed checkpoint
+below is retained unchanged as historical evidence, not current dispatch authority.
+
 Updated: 2026-09-10T15:02:08-07:00 (America/Los_Angeles).
 
 State: **BLOCKED on newly executed persisted odds equivalence; NOT RELEASED**.

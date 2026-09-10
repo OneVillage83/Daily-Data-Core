@@ -1,5 +1,10 @@
 # Daily Data Core Integration Contracts
 
+Current optional quote-label clarification and parser-v3 successor:
+`TDL03F_OPTIONAL_DESCRIPTION_20260910.md`. Exactly empty/absent/null normalize to
+None; whitespace-only/non-string remain invalid; raw bytes and subject identity
+requirements remain unchanged. Candidate 0.2.2.dev1 is unreleased.
+
 Updated: 2026-09-09T22:06:11-07:00 (America/Los_Angeles).
 Candidate 0.2.1.dev1 adds verified `ddc-weather-evidence-v1` and neutral
 `ddc-forecast-window-evaluation-v1`; see

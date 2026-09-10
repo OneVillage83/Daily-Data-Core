@@ -1,7 +1,8 @@
 # TDL-03F optional quote description contract and repair
 
 Updated: 2026-09-10T15:15:00-07:00 (America/Los_Angeles).
-Status: IMPLEMENTING / UNRELEASED; no consumer authority switch.
+Status: COMPLETE (local repair/admission) / UNRELEASED; no consumer authority switch.
+Final local validation recorded 2026-09-10T15:33:00-07:00.
 
 The exact prepared 0.2.1 wheel reproduces the private persisted 2-versus-1 quote
 mismatch, with identical source hash and deterministic incorrect replay. New
@@ -62,6 +63,58 @@ Prepared 0.2.1 at hash
 retained, REJECTED BEFORE PUBLICATION; do not overwrite or publish it. Certified
 dev1 and published 0.1.0 remain untouched. No tag/release/pin/cutover in TDL-03F.
 
-Local validation, reproducible artifact identity and exact continuation will be
-appended after execution. Scientific authority remains 0 AVAILABLE / 5 BLOCKED /
-22 MISSING and MLB legacy remains ACTIVE_PRODUCTION_AUTHORITY.
+## Exact corrected artifact and local validation
+
+Branch: `codex/ddc6-mlb-migration-20260909`, draft PR #4.
+Implementation: `13e9cf32a0be9dfec978f0d86215d428fd325e21`.
+Source tree: `033fd06f0005b8f9faaa4071efd4449741c594af`.
+Version: `0.2.2.dev1`; wheel: `daily_data_core-0.2.2.dev1-py3-none-any.whl`.
+SHA-256: `4fda87bc841c0bf4e484d279a4334cbb69568ee1ca61483d4c59ba1895b21bed`.
+Two clean Git-archive builds are byte-identical (SOURCE_DATE_EPOCH=1787788800;
+CPython 3.12.10, build 1.5.0, setuptools 83.0.0, wheel 0.48.0).
+Local retained outputs: `.validation/tdl03f-wheel-one/` and `tdl03f-wheel-two/`.
+Later documentation commits do not change this artifact's implementation identity.
+
+- Final source suite: 144 passed in 15.17s; Ruff passed; strict mypy 28 files passed.
+- Exact hash-locked wheel in a new isolated environment, tests copied outside source:
+  144 passed in 15.11s; isolated import/site-packages/direct_url digest verified.
+- Permanent optional-description regression: 24 passed, versus 8 failed before repair.
+- Runtime/development locks regenerated without drift; both environments' pip check
+  passed; runtime pip-audit found no known vulnerabilities.
+- Tracked-source secret scan: 64 files, no findings; configured-secret count 0,
+  environment files deliberately not inspected. This is not a live credential test.
+- Exact-wheel fresh-process consumer gates: package 7/7, comparison 80/80,
+  failure replay 10/10, redirect history 8/8, forecast history 13/13,
+  weather evaluation 23/23; zero network calls throughout.
+- Private consumer persisted admission V2: four description variants, legacy 2 and
+  candidate 2 quotes each; identical reopened SQLite rows, event/value identities,
+  raw evidence, verified durable market inventory and Value-input evaluation.
+  Strict retained-history replay reproduces the same persistence/Value payloads,
+  network 0. SQLite integrity and foreign keys pass. Future observations remain
+  rejected at prediction time; original acquisition clocks are retained.
+
+The private consumer additionally corrected its existing A2 raw-offer constructor's
+same premature required-text rejection, canonicalizing exactly empty to None before
+unchanged subject binding. TEAM/PLAYER requirements remain fail-closed. This was
+needed even on the legacy side of the newly exercised Value-input path; it is not
+a DDC fallback or production activation. Private fixtures/code remain private.
+Consumer focused suite: 68 passed; Ruff and strict mypy 774 files passed.
+
+## Governed continuation
+
+TDL-03B-FINAL resume: READY because persisted equivalence and bounded dual-path
+admission now PASS. This is local repair certification, not new hosted/private CI
+certification or production cutover certification. No hosted work was dispatched
+or polled. Prior exact-source receipts do not certify these changed implementation
+bytes. Sol must certify this successor and the exact private consumer successor;
+the private handoff records checkout identities and explicit wheel-gate commands.
+Do not reuse old default SHAs/artifacts. Keep immutable bad-candidate evidence.
+
+Then resume the separately governed final-version/reproducibility certification,
+immutable release, exact consumer hash pin, active adapter proof, migrated PIT/replay,
+15-phase rehearsal, rollback proof and final private certification. A final-version
+build has different bytes and requires its own hash and gates. Do not publish this
+development candidate or rejected 0.2.1 as an implementation shortcut.
+Scientific authority remains 0 AVAILABLE / 5 BLOCKED / 22 MISSING;
+production remains LEGACY_ACTIVE_PRODUCTION_AUTHORITY. No full consumer suite,
+Docker rebuild, live provider validation or cutover was claimed by this bounded job.
