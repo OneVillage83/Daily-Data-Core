@@ -33,7 +33,9 @@ class SequenceSession:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
         timeout: int,
+        allow_redirects: bool = True,
     ) -> requests.Response:
+        assert allow_redirects is False
         self.calls.append(RecordedCall(url, params, headers, timeout))
         item = self.items.pop(0)
         if isinstance(item, requests.RequestException):

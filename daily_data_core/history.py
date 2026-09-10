@@ -72,6 +72,91 @@ def read_payload(document: dict[str, Any], content: bytes) -> ProviderPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class HttpExchange:
+    call_id: str
+    attempt_ordinal: int
+    ordinal: int
+    request_url: str
+    started_at: datetime
+    completed_at: datetime
+    payload: ProviderPayload | None
+    headers: tuple[tuple[str, str], ...] = ()
+    quota: tuple[tuple[str, str | None], ...] = ()
+    redirect_target: str | None = None
+    decision: str = "terminal"
+    error_type: str | None = None
+    response_status: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.call_id or self.attempt_ordinal < 1 or self.ordinal < 1:
+            raise ValueError("invalid exchange identity")
+        if as_utc(self.completed_at) < as_utc(self.started_at):
+            raise ValueError("exchange clocks run backwards")
+        if self.payload is None and self.error_type is None:
+            raise ValueError("exchange requires response or transport error")
+        if self.payload is not None and self.response_status != self.payload.response_status_code:
+            raise ValueError("exchange status differs from response")
+        if self.decision not in {
+            "received",
+            "terminal",
+            "follow",
+            "missing_location",
+            "malformed_location",
+            "unsupported_scheme",
+            "https_downgrade",
+            "untrusted_target",
+            "redirect_loop",
+            "redirect_limit",
+            "sensitive_redirect_query",
+        }:
+            raise ValueError("unknown exchange disposition")
+        if self.payload is not None and not (
+            as_utc(self.started_at)
+            <= as_utc(self.payload.provenance.observed_at)
+            <= as_utc(self.completed_at)
+        ):
+            raise ValueError("response clock outside exchange")
+        if self.decision == "follow" and (
+            self.redirect_target is None
+            or self.payload is None
+            or self.payload.response_status_code not in {301, 302, 303, 307, 308}
+        ):
+            raise ValueError("follow requires redirect response and target")
+
+    @property
+    def attempt_id(self) -> str:
+        return digest([self.call_id, self.attempt_ordinal])
+
+    @property
+    def exchange_id(self) -> str:
+        return digest([self.attempt_id, self.ordinal])
+
+    def document(self) -> dict[str, object]:
+        return {
+            "schema": "ddc-http-exchange-v1",
+            "exchange_id": self.exchange_id,
+            "attempt_id": self.attempt_id,
+            "call_id": self.call_id,
+            "attempt_ordinal": self.attempt_ordinal,
+            "ordinal": self.ordinal,
+            "method": "GET",
+            "request_url": self.request_url,
+            "started_at": self.started_at.isoformat(),
+            "completed_at": self.completed_at.isoformat(),
+            "payload": payload_document(self.payload) if self.payload is not None else None,
+            "headers": dict(self.headers),
+            "quota": dict(self.quota),
+            "redirect_target": self.redirect_target,
+            "decision": self.decision,
+            "error_type": self.error_type,
+            "response_status": self.response_status,
+            "normalization_relevant": self.decision == "terminal"
+            and self.payload is not None
+            and 200 <= (self.response_status or 0) < 300,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PhysicalAttempt:
     call_id: str
     ordinal: int
@@ -85,6 +170,7 @@ class PhysicalAttempt:
     will_retry: bool
     delay_seconds: float
     payload: ProviderPayload | None = None
+    exchanges: tuple[HttpExchange, ...] = ()
 
     def __post_init__(self) -> None:
         if self.ordinal < 1 or as_utc(self.completed_at) < as_utc(self.started_at):
@@ -95,6 +181,7 @@ class PhysicalAttempt:
             "http_status_error",
             "json_error",
             "schema_error",
+            "redirect_error",
         }:
             raise ValueError("unknown attempt outcome")
         if self.outcome == "transport_error" and self.payload is not None:
@@ -107,13 +194,34 @@ class PhysicalAttempt:
             raise ValueError("invalid retry delay")
         if self.will_retry and not self.retryable:
             raise ValueError("retry requires an explicit retryable outcome")
+        previous = as_utc(self.started_at)
+        for ordinal, exchange in enumerate(self.exchanges, 1):
+            if (exchange.call_id, exchange.attempt_ordinal, exchange.ordinal) != (
+                self.call_id,
+                self.ordinal,
+                ordinal,
+            ):
+                raise ValueError("exchange parent/order mismatch")
+            if as_utc(exchange.started_at) < previous:
+                raise ValueError("exchange order runs backwards")
+            if exchange.decision == "received":
+                raise ValueError("attempt contains unresolved exchange")
+            if ordinal > 1 and self.exchanges[ordinal - 2].redirect_target != exchange.request_url:
+                raise ValueError("redirect target does not match next exchange")
+            if (exchange.decision == "follow") != (ordinal < len(self.exchanges)):
+                raise ValueError("exchange terminal disposition mismatch")
+            previous = as_utc(exchange.completed_at)
+        if self.exchanges and (
+            self.payload != self.exchanges[-1].payload or as_utc(self.completed_at) < previous
+        ):
+            raise ValueError("attempt terminal exchange mismatch")
 
     @property
     def attempt_id(self) -> str:
         return digest([self.call_id, self.ordinal])
 
     def document(self) -> dict[str, object]:
-        return {
+        document: dict[str, object] = {
             "schema": "ddc-physical-attempt-v1",
             "call_id": self.call_id,
             "attempt_id": self.attempt_id,
@@ -129,6 +237,10 @@ class PhysicalAttempt:
             "delay_seconds": self.delay_seconds,
             "payload": payload_document(self.payload) if self.payload is not None else None,
         }
+        if self.exchanges:
+            document["schema"] = "ddc-physical-attempt-v2"
+            document["exchanges"] = [e.document() for e in self.exchanges]
+        return document
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +261,7 @@ class LogicalCall:
     source_run_id: str | None = None
     package_version: str = __version__
     source_code_identity: str = ""
+    redirect_policy: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.call_id or not self.provider_id or not self.operation:
@@ -173,7 +286,12 @@ class LogicalCall:
 
     @property
     def payloads(self) -> tuple[ProviderPayload, ...]:
-        return tuple(a.payload for a in self.attempts if a.payload is not None)
+        return tuple(
+            p
+            for a in self.attempts
+            for p in (tuple(e.payload for e in a.exchanges) if a.exchanges else (a.payload,))
+            if p is not None
+        )
 
     def diagnostics_document(self) -> dict[str, object]:
         last = self.attempts[-1]
@@ -189,7 +307,7 @@ class LogicalCall:
         }
 
     def document(self) -> dict[str, object]:
-        return {
+        document: dict[str, object] = {
             "schema": "ddc-logical-call-v1",
             "call_id": self.call_id,
             "provider_id": self.provider_id,
@@ -213,6 +331,11 @@ class LogicalCall:
             "package_version": self.package_version,
             "source_code_identity": self.source_code_identity,
         }
+        if self.redirect_policy:
+            document["schema"] = "ddc-logical-call-v2"
+            document["redirect_policy"] = dict(self.redirect_policy)
+            document["exchange_count"] = sum(len(a.exchanges) for a in self.attempts)
+        return document
 
     @property
     def receipt_id(self) -> str:

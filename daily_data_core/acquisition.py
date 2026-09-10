@@ -15,6 +15,7 @@ from typing import Any, Literal, cast
 from uuid import uuid4
 
 from daily_data_core.history import (
+    HttpExchange,
     LogicalCall,
     PhysicalAttempt,
     ReplayMismatchError,
@@ -172,7 +173,9 @@ class AcquisitionHistory:
 
     def document(self) -> dict[str, object]:
         return {
-            "schema": "ddc-acquisition-history-v3",
+            "schema": "ddc-acquisition-history-v4"
+            if any(c.redirect_policy for c in self.calls)
+            else "ddc-acquisition-history-v3",
             "acquisition_id": self.acquisition_id,
             "provider_id": self.provider_id,
             "dataset_key": self.dataset_key,
@@ -201,6 +204,53 @@ class EvidenceLedger:
     retention_allowed: Callable[[AcquisitionEvidence], bool]
     history_retention_allowed: Callable[[dict[str, object]], bool] | None = None
 
+    def put_exchange(
+        self,
+        exchange: HttpExchange,
+        provider: str,
+        dataset: str,
+        parser: str,
+        *,
+        received: bool = False,
+    ) -> str | None:
+        if exchange.payload is not None:
+            evidence = AcquisitionEvidence(
+                provider, dataset, parser, exchange.payload, "received", exchange.completed_at
+            )
+            if not self.retention_allowed(evidence):
+                return None
+            self.store.put(provider, dataset, exchange.payload)
+        document = exchange.document()
+        document["provider_id"] = provider
+        document["operation"] = dataset
+        return self._history_put(
+            "exchange_received_v1" if received else "exchange_v1",
+            exchange.exchange_id,
+            document,
+            exchange.completed_at,
+        )
+
+    def exchange_state(self, call_id: str, attempt_ordinal: int, ordinal: int) -> dict[str, object]:
+        """Read known exchange identity only; never resumes ambiguous external work."""
+        identity = digest(digest([digest([call_id, attempt_ordinal]), ordinal]))
+        result: dict[str, object] = {}
+        for kind in ("exchange_start_v1", "exchange_received_v1", "exchange_v1"):
+            try:
+                receipt = self.store.resolve_identity(kind, identity)
+            except FileNotFoundError:
+                continue
+            result[kind] = json.loads(self.store.read("ddc_receipts", kind, receipt))
+        try:
+            terminal = self.store.resolve_identity(
+                "attempt_v2", digest(digest([call_id, attempt_ordinal]))
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            self.store.read("ddc_receipts", "attempt_v2", terminal)
+            result["attempt_terminal_receipt"] = terminal
+        return result
+
     def _history_put(
         self, kind: str, identity: str, document: dict[str, object], timestamp: datetime
     ) -> str | None:
@@ -223,6 +273,11 @@ class EvidenceLedger:
     def put_attempt(
         self, attempt: PhysicalAttempt, provider: str, dataset: str, parser_version: str
     ) -> str | None:
+        if any(
+            self.put_exchange(e, provider, dataset, parser_version) is None
+            for e in attempt.exchanges
+        ):
+            return None
         if attempt.payload is not None:
             evidence = AcquisitionEvidence(
                 provider, dataset, parser_version, attempt.payload, "received", attempt.completed_at
@@ -231,7 +286,10 @@ class EvidenceLedger:
                 return None
             self.store.put(provider, dataset, attempt.payload)
         return self._history_put(
-            "attempt_v1", attempt.attempt_id, attempt.document(), attempt.completed_at
+            "attempt_v2" if attempt.exchanges else "attempt_v1",
+            attempt.attempt_id,
+            attempt.document(),
+            attempt.completed_at,
         )
 
     def put_call(self, call: LogicalCall, parser_version: str) -> str | None:
@@ -240,7 +298,12 @@ class EvidenceLedger:
             for a in call.attempts
         ):
             return None
-        return self._history_put("call_v1", call.call_id, call.document(), call.completed_at)
+        return self._history_put(
+            "call_v2" if call.redirect_policy else "call_v1",
+            call.call_id,
+            call.document(),
+            call.completed_at,
+        )
 
     def put_history(self, history: AcquisitionHistory) -> str | None:
         if not history.calls:
@@ -252,16 +315,53 @@ class EvidenceLedger:
         if any(self.put(e) is None for e in history.evidence):
             return None
         return self._history_put(
-            "history_v3", history.acquisition_id, history.document(), history.completed_at
+            "history_v4" if any(c.redirect_policy for c in history.calls) else "history_v3",
+            history.acquisition_id,
+            history.document(),
+            history.completed_at,
         )
 
+    def _read_exchange(self, item: dict[str, Any], provider: str, dataset: str) -> HttpExchange:
+        body = item["payload"]
+        exchange = HttpExchange(
+            item["call_id"],
+            item["attempt_ordinal"],
+            item["ordinal"],
+            item["request_url"],
+            datetime.fromisoformat(item["started_at"]),
+            datetime.fromisoformat(item["completed_at"]),
+            None
+            if body is None
+            else read_payload(body, self.store.read(provider, dataset, body["sha256"])),
+            tuple(sorted(item["headers"].items())),
+            tuple(sorted(item["quota"].items())),
+            item["redirect_target"],
+            item["decision"],
+            item["error_type"],
+            item["response_status"],
+        )
+        if exchange.document() != item:
+            raise ReplayMismatchError("exchange identity mismatch")
+        expected = {**item, "provider_id": provider, "operation": dataset}
+        receipt = digest(expected)
+        if json.loads(self.store.read("ddc_receipts", "exchange_v1", receipt)) != expected:
+            raise ReplayMismatchError("exchange receipt mismatch")
+        self.store.verify_identity("exchange_v1", digest(exchange.exchange_id), receipt)
+        return exchange
+
     def read_call(self, receipt_id: str) -> LogicalCall:
-        doc = json.loads(self.store.read("ddc_receipts", "call_v1", receipt_id))
-        if doc["schema"] != "ddc-logical-call-v1":
+        kind = "call_v2"
+        try:
+            doc = json.loads(self.store.read("ddc_receipts", kind, receipt_id))
+        except FileNotFoundError:
+            kind = "call_v1"
+            doc = json.loads(self.store.read("ddc_receipts", kind, receipt_id))
+        if doc["schema"] not in {"ddc-logical-call-v1", "ddc-logical-call-v2"}:
             raise ReplayMismatchError("unsupported logical call schema")
         attempts: list[PhysicalAttempt] = []
         for item in doc["attempts"]:
-            recorded = self.store.read("ddc_receipts", "attempt_v1", digest(item))
+            attempt_kind = "attempt_v2" if "exchanges" in item else "attempt_v1"
+            recorded = self.store.read("ddc_receipts", attempt_kind, digest(item))
             if json.loads(recorded) != item:
                 raise ReplayMismatchError("attempt reference mismatch")
             body = item["payload"]
@@ -285,10 +385,14 @@ class EvidenceLedger:
                 item["will_retry"],
                 item["delay_seconds"],
                 payload,
+                tuple(
+                    self._read_exchange(e, doc["provider_id"], doc["operation"])
+                    for e in item.get("exchanges", [])
+                ),
             )
             if attempt.document() != item:
                 raise ReplayMismatchError("attempt identity mismatch")
-            self.store.verify_identity("attempt_v1", digest(attempt.attempt_id), digest(item))
+            self.store.verify_identity(attempt_kind, digest(attempt.attempt_id), digest(item))
             attempts.append(attempt)
         call = LogicalCall(
             doc["call_id"],
@@ -307,20 +411,26 @@ class EvidenceLedger:
             doc["source_run_id"],
             doc["package_version"],
             doc["source_code_identity"],
+            tuple(sorted(doc.get("redirect_policy", {}).items())),
         )
         if call.receipt_id != receipt_id:
             raise ReplayMismatchError("logical call identity mismatch")
-        self.store.verify_identity("call_v1", digest(call.call_id), receipt_id)
+        self.store.verify_identity(kind, digest(call.call_id), receipt_id)
         return call
 
     def read_history(self, receipt_id: str) -> AcquisitionHistory:
+        kind = "history_v4"
         try:
-            doc = json.loads(self.store.read("ddc_receipts", "history_v3", receipt_id))
+            doc = json.loads(self.store.read("ddc_receipts", kind, receipt_id))
         except FileNotFoundError:
-            raise ReplayMismatchError(
-                "missing v3 history; response-only receipts cannot reconstruct calls"
-            ) from None
-        if doc["schema"] != "ddc-acquisition-history-v3":
+            kind = "history_v3"
+            try:
+                doc = json.loads(self.store.read("ddc_receipts", kind, receipt_id))
+            except FileNotFoundError:
+                raise ReplayMismatchError(
+                    "missing history; response-only receipts cannot reconstruct calls"
+                ) from None
+        if doc["schema"] not in {"ddc-acquisition-history-v3", "ddc-acquisition-history-v4"}:
             raise ReplayMismatchError("strict replay requires versioned logical-call history")
         history = AcquisitionHistory(
             doc["acquisition_id"],
@@ -340,7 +450,7 @@ class EvidenceLedger:
         )
         if history.receipt_id != receipt_id:
             raise ReplayMismatchError("acquisition history identity mismatch")
-        self.store.verify_identity("history_v3", digest(history.acquisition_id), receipt_id)
+        self.store.verify_identity(kind, digest(history.acquisition_id), receipt_id)
         return history
 
     def put(self, evidence: AcquisitionEvidence) -> str | None:
@@ -448,6 +558,30 @@ class AcquisitionCapture:
                 attempt, self.provider_id, self.dataset_key, self.parser_version
             )
 
+    def exchange_started(self, document: dict[str, object]) -> None:
+        if self.ledger:
+            identity = digest(
+                [digest([document["call_id"], document["attempt_ordinal"]]), document["ordinal"]]
+            )
+            self.ledger._history_put(
+                "exchange_start_v1",
+                identity,
+                document,
+                datetime.fromisoformat(str(document["started_at"])),
+            )
+
+    def exchange_received(self, exchange: HttpExchange) -> None:
+        if self.ledger:
+            self.ledger.put_exchange(
+                exchange, self.provider_id, self.dataset_key, self.parser_version, received=True
+            )
+
+    def exchanged(self, exchange: HttpExchange) -> None:
+        if self.ledger:
+            self.ledger.put_exchange(
+                exchange, self.provider_id, self.dataset_key, self.parser_version
+            )
+
     def completed(self, call: LogicalCall) -> None:
         self.calls.append(call)
         self.diagnostics = diagnostics_for_call(call)
@@ -540,6 +674,8 @@ class AcquisitionCapture:
                 item,
                 disposition="http_error"
                 if (item.payload.response_status_code or 200) >= 400
+                else "received"
+                if 300 <= (item.payload.response_status_code or 200) < 400
                 else disposition,
                 evaluated_at=datetime.now(UTC),
                 diagnostic_codes=diagnostic_codes,
@@ -636,6 +772,12 @@ class AcquisitionReplayClient:
         ):
             raise ReplayMismatchError("strict replay package/code identity mismatch")
         if mode == "strict" and any(
+            not c.redirect_policy or any(not a.exchanges for a in c.attempts) for c in history.calls
+        ):
+            raise ReplayMismatchError(
+                "strict replay requires complete exchange history; legacy hops cannot be inferred"
+            )
+        if mode == "strict" and any(
             c.validator_version is not None and c.validator_version not in validator_versions
             for c in history.calls
         ):
@@ -695,10 +837,8 @@ class AcquisitionReplayClient:
             raise ReplayMismatchError("strict replay requested scope differs from recorded call")
         self.index += 1
         if observer is not None:
-            for attempt in call.attempts:
-                if attempt.payload is not None:
-                    observer.received(attempt.payload)
-                # Strict replay returns original evidence; it never republishes physical attempts.
+            for retained_payload in call.payloads:
+                observer.received(retained_payload)
             observer.completed(call)
         diagnostics = diagnostics_for_call(call)
         if call.terminal_outcome != "success":

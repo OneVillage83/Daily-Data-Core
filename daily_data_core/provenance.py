@@ -91,6 +91,12 @@ class FileSystemRawEvidenceStore:
         ):
             raise RawEvidenceCollisionError("history identity binding mismatch")
 
+    def resolve_identity(self, namespace: str, identity: str) -> str:
+        receipt = self._path("ddc_history_bindings", namespace, identity).read_text("ascii")
+        if re.fullmatch(r"[0-9a-f]{64}", receipt) is None:
+            raise RawEvidenceCollisionError("invalid history binding")
+        return receipt
+
     def _path(self, provider_id: str, dataset_key: str, digest: str) -> Path:
         _validate_segment(provider_id, "provider_id")
         _validate_segment(dataset_key, "dataset_key")

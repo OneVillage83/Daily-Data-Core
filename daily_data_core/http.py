@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -16,12 +16,14 @@ import requests
 
 from daily_data_core.history import (
     HistoryObserver,
+    HttpExchange,
     LogicalCall,
     PhysicalAttempt,
     SchemaValidationError,
     code_identity,
 )
 from daily_data_core.providers import ProviderPayload
+from daily_data_core.redirects import REDIRECT_STATUSES, RedirectPolicy
 from daily_data_core.temporal import TemporalProvenance
 
 if TYPE_CHECKING:
@@ -189,6 +191,7 @@ class HttpClient:
         schema_validator: Callable[[JsonPayload], None] | None = None,
         validator_version: str | None = None,
         retry_schema_errors: bool = False,
+        redirect_policy: RedirectPolicy | None = None,
     ) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
@@ -205,6 +208,185 @@ class HttpClient:
         self.max_attempts = max_attempts
         self.retry_max_seconds = retry_max_seconds
         self.session = requests.Session()
+        self.redirect_policy = redirect_policy or RedirectPolicy()
+
+    def _get_exchanges(
+        self,
+        url: str,
+        params: dict[str, str] | None,
+        headers: dict[str, str] | None,
+        call_id: str,
+        attempt: int,
+        observer: HistoryObserver | None,
+    ) -> tuple[
+        requests.Response | None, tuple[HttpExchange, ...], requests.RequestException | None
+    ]:
+        current = requests.Request("GET", url, params=params).prepare().url or url
+        visited = {current}
+        exchanges: list[HttpExchange] = []
+        for hop in range(1, self.redirect_policy.max_redirects + 2):
+            started = datetime.now(UTC)
+            safe = redact_url(current)
+            start = {
+                "schema": "ddc-http-exchange-start-v1",
+                "call_id": call_id,
+                "attempt_ordinal": attempt,
+                "ordinal": hop,
+                "method": "GET",
+                "request_url": safe,
+                "started_at": started.isoformat(),
+            }
+            hook = getattr(observer, "exchange_started", None)
+            if hook is not None:
+                hook(start)
+            try:
+                if hop == 1 and type(self.session).get is not requests.Session.get:
+                    # Explicitly injected test/custom sessions must honor allow_redirects=False.
+                    response = self.session.get(
+                        url,
+                        params=params,
+                        headers=headers,
+                        timeout=self.timeout,
+                        allow_redirects=False,
+                    )
+                else:
+                    if hop == 1:
+                        prepared = self.session.prepare_request(
+                            requests.Request("GET", current, headers=headers)
+                        )
+                    else:
+                        # No Session auth/cookies/netrc or arbitrary headers on redirected requests.
+                        safe_headers = {
+                            k: v
+                            for k, v in {**self.session.headers, **(headers or {})}.items()
+                            if k.lower() in {"user-agent", "accept", "accept-encoding"}
+                        }
+                        prepared = requests.Request("GET", current, headers=safe_headers).prepare()
+                    adapter = self.session.get_adapter(current)
+                    if (
+                        isinstance(adapter, requests.adapters.HTTPAdapter)
+                        and adapter.max_retries.total != 0
+                    ):
+                        raise ValueError("adapter-level retries bypass DDC attempt accounting")
+                    settings = self.session.merge_environment_settings(
+                        current, {}, False, None, None
+                    )
+                    # Session.send pre-processes Location even with redirects disabled. Call its
+                    # adapter directly so malformed Location cannot discard a received response.
+                    response = adapter.send(
+                        prepared,
+                        timeout=self.timeout,
+                        stream=bool(settings["stream"]),
+                        verify=settings["verify"] if settings["verify"] is not None else True,
+                        cert=settings["cert"],
+                        proxies=settings["proxies"],
+                    )
+            except requests.RequestException as exc:
+                exchange = HttpExchange(
+                    call_id,
+                    attempt,
+                    hop,
+                    safe,
+                    started,
+                    datetime.now(UTC),
+                    None,
+                    error_type=type(exc).__name__,
+                )
+                hook = getattr(observer, "exchanged", None)
+                if hook is not None:
+                    hook(exchange)
+                exchanges.append(exchange)
+                return None, tuple(exchanges), exc
+            try:
+                content = response.content
+            except requests.RequestException as exc:
+                exchange = HttpExchange(
+                    call_id,
+                    attempt,
+                    hop,
+                    safe,
+                    started,
+                    datetime.now(UTC),
+                    None,
+                    quota=tuple(sorted(_quota_headers(response).items())),
+                    error_type=type(exc).__name__,
+                    response_status=response.status_code,
+                )
+                hook = getattr(observer, "exchanged", None)
+                if hook is not None:
+                    hook(exchange)
+                exchanges.append(exchange)
+                return None, tuple(exchanges), exc
+            received = datetime.now(UTC)
+            date = _http_date_utc(response.headers.get("Date"))
+            payload = ProviderPayload(
+                content,
+                response.headers.get("Content-Type") or "application/octet-stream",
+                redact_url(response.url or current),
+                TemporalProvenance(
+                    received, received, published_at=datetime.fromisoformat(date) if date else None
+                ),
+                response_status_code=response.status_code,
+            )
+            if observer is not None:
+                observer.received(payload)
+            quota = tuple(sorted(_quota_headers(response).items()))
+            # Canonical allowlisted headers; raw Location/Set-Cookie are never stored.
+            safe_headers_evidence: dict[str, str] = {}
+            if date:
+                safe_headers_evidence["date"] = date
+            delay = _retry_after_seconds(
+                response.headers.get("Retry-After"), self.retry_max_seconds
+            )
+            if delay is not None:
+                safe_headers_evidence["retry-after-seconds"] = str(delay)
+            exchange = HttpExchange(
+                call_id,
+                attempt,
+                hop,
+                safe,
+                started,
+                received,
+                payload,
+                tuple(sorted(safe_headers_evidence.items())),
+                quota,
+                decision="received",
+                response_status=response.status_code,
+            )
+            hook = getattr(observer, "exchange_received", None)
+            if hook is not None:
+                hook(exchange)  # Durable response receipt precedes any redirect policy transition.
+            target: str | None = None
+            decision = "terminal"
+            if response.status_code in REDIRECT_STATUSES:
+                target, decision = self.redirect_policy.resolve(
+                    current, response.headers.get("Location"), visited
+                )
+                if decision == "follow" and hop > self.redirect_policy.max_redirects:
+                    decision = "redirect_limit"
+                if (
+                    decision == "follow"
+                    and target is not None
+                    and any(
+                        any(token in k.casefold() for token in _SENSITIVE_QUERY_TOKENS)
+                        for k, _ in parse_qsl(urlsplit(target).query, keep_blank_values=True)
+                    )
+                ):
+                    decision = "sensitive_redirect_query"
+            exchange = replace(
+                exchange, redirect_target=redact_url(target) if target else None, decision=decision
+            )
+            hook = getattr(observer, "exchanged", None)
+            if hook is not None:
+                hook(exchange)
+            exchanges.append(exchange)
+            if decision != "follow":
+                return response, tuple(exchanges), None
+            assert target is not None
+            response.close()
+            visited.add(target)
+            current = target
+        raise AssertionError("redirect bound exhausted without terminal disposition")
 
     def get_json(
         self,
@@ -242,34 +424,30 @@ class HttpClient:
             delay = 0.0
             error_type: str | None = None
             retry_after: str | None = None
+            exchanges: tuple[HttpExchange, ...] = ()
             try:
-                response = self.session.get(
-                    url, params=params, headers=headers, timeout=self.timeout
+                response, exchanges, failure = self._get_exchanges(
+                    url, params, headers, call_id, ordinal, observer
                 )
+                if failure is not None:
+                    raise failure
             except requests.RequestException as exc:
                 outcome = "transport_error"
                 error_type = type(exc).__name__
                 retryable = isinstance(exc, (requests.Timeout, requests.ConnectionError))
+                if exchanges:
+                    status = exchanges[-1].response_status
+                    quota = dict(exchanges[-1].quota)
             else:
+                assert response is not None
                 status = response.status_code
                 quota = _quota_headers(response)
-                source_date = _http_date_utc(response.headers.get("Date"))
-                retrieved_at = datetime.now(UTC)
-                payload = ProviderPayload(
-                    response.content,
-                    response.headers.get("Content-Type") or "application/octet-stream",
-                    redact_url(response.url or prepared_url),
-                    TemporalProvenance(
-                        retrieved_at,
-                        retrieved_at,
-                        published_at=datetime.fromisoformat(source_date) if source_date else None,
-                    ),
-                    response_status_code=status,
-                )
-                if observer is not None:
-                    observer.received(payload)
+                payload = exchanges[-1].payload
                 retry_after = response.headers.get("Retry-After")
-                if not response.ok:
+                if exchanges[-1].decision != "terminal":
+                    outcome = "redirect_error"
+                    error_type = exchanges[-1].decision
+                elif not response.ok:
                     outcome = "http_status_error"
                     retryable = status in _RETRYABLE_STATUS_CODES
                 else:
@@ -317,6 +495,7 @@ class HttpClient:
                 will_retry,
                 delay,
                 payload,
+                exchanges,
             )
             attempts.append(attempt)
             if observer is not None:
@@ -342,6 +521,7 @@ class HttpClient:
             max(0.0, time.monotonic() - started),
             source_run_id,
             source_code_identity=code_identity(),
+            redirect_policy=self.redirect_policy.document(),
         )
         if observer is not None:
             observer.completed(call)
@@ -352,6 +532,7 @@ class HttpClient:
                 "http_status_error": f"HTTP {status}",
                 "json_error": "Invalid JSON",
                 "schema_error": "Response schema invalid",
+                "redirect_error": "Redirect rejected",
             }
             error_class = RetryableHttpError if attempts[-1].retryable else HttpError
             raise error_class(
