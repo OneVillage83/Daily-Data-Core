@@ -1,5 +1,9 @@
 # TDL-03B resume: redirect physical-evidence blocker
 
+TDL-03D continuation: this historical dev2 defect is repaired in local dev4;
+read `TDL03D_EXCHANGE_REDIRECT_HANDOFF_20260909.md` first. Release and MLB cutover
+remain withheld pending the delegated validation and governed release sequence.
+
 Updated: 2026-09-09T20:23:14-07:00 (America/Los_Angeles).
 
 **BLOCKED before release or consumer migration.** The certified candidate's existing

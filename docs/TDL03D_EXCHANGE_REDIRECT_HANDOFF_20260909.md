@@ -1,6 +1,6 @@
 # TDL-03D HTTP exchange and redirect evidence
 
-Updated: 2026-09-09T20:49:17-07:00 (America/Los_Angeles).
+Updated: 2026-09-09T20:58:11-07:00 (America/Los_Angeles).
 
 Branch `codex/ddc6-mlb-migration-20260909`; parent
 `cbd365cb00c92fef286d1db930ef75c522fbe559`; draft PR #4.
@@ -120,3 +120,83 @@ performed. Science remains **0 AVAILABLE / 5 BLOCKED / 22 MISSING**. After local
 candidate admission, delegate exact-source CI; then resume the governed TDL-03B
 release and consumer integration sequence. Do not infer release/cutover authorization
 from completion of this bounded repair.
+
+## Final candidate and exact local evidence
+
+Implementation source: **`642f5e62ecb4ab4d21909cff1c04f74bd8e8e828`**.
+Subsequent TDL-03D DDC commits are documentation-only. Verify that delta before
+relying on this receipt; the final documentation head is also recorded by MLB.
+
+Wheel: `daily_data_core-0.2.0.dev4-py3-none-any.whl`.
+SHA-256: **`3a3cf828b9e858e2aaba1dc2b41832109c278a435b3952285a43c9d17bc5169e`**.
+Two separate clean Git-archive builds produced identical bytes. Local retained path:
+`.validation/tdl03d-dev4-wheel-one/` (second build in `tdl03d-dev4-wheel-two/`).
+Python 3.12.10; pip 26.2; pip-tools 7.6.1; build 1.5.0; setuptools 83.0.0;
+wheel 0.48.0; `SOURCE_DATE_EPOCH=1787788800`; `python -m build --wheel --no-isolation`.
+The wheel contains only the shared package and distribution metadata.
+
+Unchanged runtime lock SHA-256:
+`7519ae45a78d9a4a490071a070ca1f72081990439bcf925c9ec5a8bba86ff2af`.
+Unchanged development lock SHA-256:
+`10fe722048eae1881dffb1ae48c804cd953667b163ebd8ba446a4ba676071e2f`.
+Both locks regenerated with CI's pinned compile command and zero Git diff.
+
+Final source suite: **114 passed** (85 retained plus 29 new); Ruff passed; strict
+mypy passed **26 files**. Consumer Ruff passed and strict mypy passed **766 files**.
+The exact dev4 wheel passed redirect admission **8/8**, persisted replay **10/10**,
+release admission **7/7**, legacy comparison **80/80**; all actual network counters
+were **0**. The retained dev2 wheel still exits **1** under the strengthened gate,
+retaining only status 200 and failing body/quota/hierarchy/target checks.
+Current MLB oracle: **119 passed**, no production source or lock delta.
+Fresh environment installed dev4 and every dependency with `--require-hashes`.
+The copied test suite ran outside the source checkout with Python isolated mode,
+importlib import mode and an assertion of site-packages / version 0.2.0.dev4:
+**114 passed in 11.36s**. `pip check` passed in both isolated DDC and MLB environments.
+Dependency audit: no known vulnerabilities. Tracked-file secret scans passed with
+zero findings/errors across **56 DDC / 1,058 MLB files** (`--skip-env`; no configured
+secret values loaded). Final diff inspected; DDC locks and MLB production files
+are unchanged. Scan scope is tracked files, not private runtime evidence.
+
+## Lower-cost validation instructions and TDL-03B resume
+
+1. Verify branch HEAD, ancestry from `cbd365cb00c92fef286d1db930ef75c522fbe559`,
+   and documentation-only delta from `642f5e62ecb4ab4d21909cff1c04f74bd8e8e828`.
+   Do not reuse dev2 certification as dev4 evidence.
+2. Run repository-authoritative `.github/workflows/ci.yml` on the exact DDC source
+   with Python 3.12, pinned bootstrap and hash locks. Commits use `[skip ci]` to
+   respect this task's remote-CI boundary; the workflow has no manual dispatch.
+   The established validation-only empty descendant trigger is acceptable only
+   with exact tree equality recorded, as in the TDL-03C operator receipt. Record
+   authoritative SHA -> tree-identical CI SHA -> run/job IDs. Do not alter source
+   to obtain a green run. Expected source tests: 114; Ruff/mypy/lock drift green.
+3. Rebuild from a clean archive using the toolchain/epoch above, verify the wheel
+   hash, and install it with `--require-hashes` plus `requirements-dev.txt` into a
+   fresh environment. Copy tests outside the checkout; assert import comes from
+   site-packages at version 0.2.0.dev4; run `python -I -m pytest -q --import-mode=importlib`
+   with a test-only pytest.ini (no repository pythonpath). Expected: 114 tests.
+   Run `pip check`, dependency audit, tracked-file secret scan and lock regeneration.
+4. In the private MLB validation checkout, run all four commands with
+   `--wheel <exact-dev4-wheel> --sha256 3a3cf828b9e858e2aaba1dc2b41832109c278a435b3952285a43c9d17bc5169e`:
+
+   ```text
+   python -m scripts.check_ddc6_redirect_history
+   python -m scripts.check_ddc6_failure_replay
+   python -m scripts.check_ddc6_release
+   python -m scripts.compare_ddc6_candidate
+   ```
+
+   Expected: 8/8, 10/10, 7/7, 80/80 and actual external/replay calls 0. Run the
+   retained 119-test MLB oracle command in its TDL-03D validation handoff.
+5. DDC has no Dockerfile/container workflow or container release requirement;
+   Docker is not applicable to this wheel repair. No Docker execution is claimed.
+   Do not retry private Actions billing failures or copy private MLB implementation,
+   evidence, provider data, logs or databases into the public DDC repository/mirror.
+6. Return substantive HTTP/evidence/PIT/security failures to Astra with exact logs;
+   handle mechanical validation issues in the operator task. Record certification
+   before the governed TDL-03B main/release/consumer-admission sequence resumes.
+
+**TDL-03B-RESUME: READY for delegated candidate validation and the existing governed
+continuation, not authorized for immediate release/cutover.** No new architectural
+blocker remains. No live-provider, remote-CI, Docker, full MLB-suite, release or
+production-migration certification is claimed here. Scientific permissions, model
+promotion, PIT authority, Recommendation Gate thresholds and registries are unchanged.

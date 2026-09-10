@@ -3,6 +3,12 @@
 Unreleased v2 acquisition/forecast evolution and migration notes:
 [LOSSLESS_ACQUISITION_V2.md](LOSSLESS_ACQUISITION_V2.md).
 
+Unreleased **0.2.0.dev4** extends logical-call/attempt evidence with immutable HTTP
+exchanges, explicit GET redirect policy, per-hop retention and strict offline replay.
+See [TDL03D_EXCHANGE_REDIRECT_HANDOFF_20260909.md](TDL03D_EXCHANGE_REDIRECT_HANDOFF_20260909.md)
+for history-v4 / attempt-v2 / exchange-v1 and backward-read semantics. A redirect is
+not a retry. This candidate is locally admitted, not released or remotely certified.
+
 ## Core rule
 DDC normalizes shared facts. A sport consumer maps those facts into its own canonical identity/state/features.
 

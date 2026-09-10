@@ -2,6 +2,16 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03D update: 2026-09-09T20:58:11-07:00 (America/Los_Angeles).
+The redirect defect below is repaired locally in **0.2.0.dev4**: immutable
+LogicalCall -> PhysicalAttempt -> HttpExchange, explicit redirect security and
+zero-network exchange replay. The strengthened redirect gate passes 8/8; retained
+replay/admission/equivalence pass 10/10, 7/7 and 80/80. See
+`TDL03D_EXCHANGE_REDIRECT_HANDOFF_20260909.md` for candidate identity and final local
+receipts. **Implementation complete; remote certification delegated.** Dev2 and the
+superseded local dev3 are unchanged. No release, merge or consumer switch occurred.
+Historical certification below does not certify dev4.
+
 TDL-03B resume update: 2026-09-09T20:23:14-07:00 (America/Los_Angeles).
 **Release/cutover BLOCKED** by a new physical-exchange evidence counterexample:
 Requests automatically follows a 302 to 200, but DDC retains only the final exchange,
