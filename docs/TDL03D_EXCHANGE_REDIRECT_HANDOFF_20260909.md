@@ -4,7 +4,7 @@ Updated: 2026-09-09T20:49:17-07:00 (America/Los_Angeles).
 
 Branch `codex/ddc6-mlb-migration-20260909`; parent
 `cbd365cb00c92fef286d1db930ef75c522fbe559`; draft PR #4.
-Candidate **0.2.0.dev3**, unreleased. Published v0.1.0 and retained dev2 are immutable
+Candidate **0.2.0.dev4**, unreleased. Published v0.1.0 and retained dev2/dev3 are immutable
 and unchanged. This job repairs shared HTTP evidence; MLB remains unswitched.
 
 ## Reproduced defect and accepted hierarchy
@@ -43,7 +43,7 @@ with max_redirects=0. Default NWS cannot follow an untrusted host around its exi
 forecast URL validation; any explicit trust expansion is caller-owned policy.
 
 Redirected requests are independently prepared: no Session auth, netrc credentials,
-cookies, response cookies, arbitrary original headers or original query parameters
+cookies, response cookies, TLS client certificates, arbitrary original headers or original query parameters
 are forwarded. Only User-Agent, Accept and Accept-Encoding are carried. Secret-bearing
 Location query keys are rejected; only sanitized resolved target metadata is stored.
 Authorization, Cookie, Set-Cookie and raw Location headers are never metadata fields.
@@ -106,6 +106,14 @@ The private redirect admission tool uses the new exchange layer while preserving
 all original missing-evidence assertions. Its new hierarchy assertion requires one
 attempt, two exchanges and zero retries, so treating redirects as retries cannot pass.
 Final committed-source wheel, installed-wheel, consumer and security receipts follow.
+
+Final review extended the credential regression to Session TLS client certificates.
+It failed against the first local dev3 build: adapter send options carried the initial
+client certificate to an explicitly trusted redirect. The repair strips that setting
+on every redirected send while retaining initial-request behavior. No real certificate
+or network was used. Dev3 at source `807a12f7be0759ec25d3ad44c8d11852a0deb227`,
+SHA-256 `712b2cdfb3e636c4c953da23283d5d2d4b71e782fbf0b79dab1697d790239dd7`,
+remains an immutable superseded local checkpoint, not the admitted candidate.
 
 No production release, merge, MLB dependency/adapter change, remote CI or Docker was
 performed. Science remains **0 AVAILABLE / 5 BLOCKED / 22 MISSING**. After local

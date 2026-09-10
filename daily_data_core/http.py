@@ -278,7 +278,7 @@ class HttpClient:
                         timeout=self.timeout,
                         stream=bool(settings["stream"]),
                         verify=settings["verify"] if settings["verify"] is not None else True,
-                        cert=settings["cert"],
+                        cert=settings["cert"] if hop == 1 else None,
                         proxies=settings["proxies"],
                     )
             except requests.RequestException as exc:

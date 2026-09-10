@@ -24,6 +24,7 @@ class FixtureAdapter(requests.adapters.BaseAdapter):
     def __init__(self, values: list[ResponseSpec]) -> None:
         self.values = iter(values)
         self.requests: list[requests.PreparedRequest] = []
+        self.send_options: list[dict[str, Any]] = []
         self.before_send: Any = None
 
     def send(
@@ -32,6 +33,7 @@ class FixtureAdapter(requests.adapters.BaseAdapter):
         if self.before_send is not None:
             self.before_send(len(self.requests), request)
         self.requests.append(request)
+        self.send_options.append(kwargs)
         value = next(self.values)
         if isinstance(value, BaseException):
             raise value
@@ -165,11 +167,14 @@ def test_trusted_cross_host_strips_all_credentials(tmp_path: Path) -> None:
         redirect_policy=RedirectPolicy(trusted_hosts=frozenset({"trusted.invalid"})),
     )
     client.session.auth = ("private-user", "private-password")
+    client.session.cert = ("private-client-cert.pem", "private-client-key.pem")
     client.session.headers.update(
         {"Authorization": "private-auth", "X-Api-Key": "private-key", "Cookie": "private-cookie"}
     )
     original = collect(client, ledger)
     assert len(adapter.requests) == 2
+    assert adapter.send_options[0]["cert"] == client.session.cert
+    assert adapter.send_options[1]["cert"] is None
     forwarded = str(dict(adapter.requests[1].headers)) + str(adapter.requests[1].url)
     assert "private-" not in forwarded and "synthetic" not in forwarded
     for path in tmp_path.rglob("*.raw"):
