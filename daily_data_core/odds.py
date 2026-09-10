@@ -22,7 +22,7 @@ from daily_data_core.temporal import as_utc, require_aware
 
 THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 PROVIDER_ID = "the_odds_api"
-PARSER_VERSION = "ddc-the-odds-api-v2"
+PARSER_VERSION = "ddc-the-odds-api-v3"
 
 # Provider keys verified against The Odds API V4 sports catalogue.
 SPORT_KEYS: dict[str, str] = {
@@ -41,6 +41,20 @@ _SUPPORTED_MARKETS = frozenset({"h2h", "spreads", "totals"})
 
 class OddsProviderSchemaError(ProviderAcquisitionError):
     pass
+
+
+def _optional_participant_description(value: object) -> str | None:
+    """Canonical optional label; raw text remains in provider evidence.
+
+    Only absent/null/exactly empty text means no supplied label. Whitespace-only
+    or non-string values are malformed, not labels or missingness aliases.
+    Nonempty labels are preserved verbatim because consumers may bind identity.
+    """
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("outcome.description must be nonblank text when supplied")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +82,10 @@ class OddsOutcomeSnapshot:
             raise ValueError("outcome price must be finite")
         if self.point is not None and not math.isfinite(self.point):
             raise ValueError("outcome point must be finite when present")
+        object.__setattr__(
+            self, "participant_description",
+            _optional_participant_description(self.participant_description),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,12 +267,10 @@ def _parse_market(
                     price=_number(outcome.get("price"), "outcome.price"),
                     point=_optional_number(outcome.get("point"), "outcome.point"),
                     source_path=f"{source_path}/outcomes/{index}",
-                    participant_description=_string(outcome["description"], "outcome.description")
-                    if outcome.get("description") is not None
-                    else None,
+                    participant_description=cast(str | None, outcome.get("description")),
                 )
             )
-        except OddsProviderSchemaError as exc:
+        except (OddsProviderSchemaError, ValueError) as exc:
             warnings.append(
                 OddsCollectionWarning(
                     "malformed_outcome",
