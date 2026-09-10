@@ -1,5 +1,9 @@
 # TDL-03D HTTP exchange and redirect evidence
 
+TDL-03B-FINAL continuation: a new forecast-window rejection lineage gate blocks
+release/cutover. Read `TDL03B_FINAL_WEATHER_WINDOW_BLOCKER_20260909.md`; the retained
+TDL-03D certification below remains scoped to its executed checks.
+
 Updated: 2026-09-09T20:58:11-07:00 (America/Los_Angeles).
 
 Branch `codex/ddc6-mlb-migration-20260909`; parent

@@ -1,5 +1,9 @@
 # TDL-03B final release preparation
 
+Continuation: the new consumer forecast-window rejection gate blocks publication;
+read `TDL03B_FINAL_WEATHER_WINDOW_BLOCKER_20260909.md` first. Prepared 0.2.0 is
+retained with its own hash; no release or consumer cutover occurred.
+
 Updated: 2026-09-09T21:26:32-07:00 (America/Los_Angeles).
 
 Starting head `0ea51d2ec798b64ae6376603d9e0a72201b2ab64`; branch

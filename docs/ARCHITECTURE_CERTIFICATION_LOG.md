@@ -2,6 +2,14 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03B-FINAL update: 2026-09-09T21:35:21-07:00 (America/Los_Angeles).
+**Release/cutover BLOCKED** by the newly executed forecast-window rejection gate.
+DDC correctly rejects an out-of-window forecast and preserves raw evidence, but
+the rejection exception drops acquisition-history and request-diagnostic references.
+Both dev4 and prepared 0.2.0 fail 6/13 new checks; original gates remain green.
+See `TDL03B_FINAL_WEATHER_WINDOW_BLOCKER_20260909.md`. Historical certification
+below retains its executed scope; it does not certify this newly exercised path.
+
 TDL-03D operator certification: 2026-09-09T21:16:47-07:00 (America/Los_Angeles).
 Candidate **0.2.0.dev4** at source `3ec5b7a1d39abadac7fa76348f0c2f943f882e7e`,
 tree `829ac070b2e11993346a119dcc5b6ad169845e9a`, is
