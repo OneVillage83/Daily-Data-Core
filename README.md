@@ -6,6 +6,13 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
+TDL-03B-FINAL resume, 2026-09-10T15:02:08-07:00 (America/Los_Angeles): private
+MLB infrastructure certification cleared, but actual persisted odds admission
+exposes a new optional-description outcome-retention difference. Final 0.2.1 is
+prepared and locally package-tested, **not released**. Read
+`docs/TDL03B_FINAL_RESUME_20260910.md`; no consumer cutover is authorized by a
+passing package-only gate. Earlier checkpoint dispositions below are historical.
+
 Current continuation (2026-09-09T22:06:11-07:00, America/Los_Angeles): TDL-03E
 locally repairs forecast-rejection lineage; see
 `docs/TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md`. Candidate 0.2.1.dev1

@@ -2,6 +2,14 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03B-FINAL resume: 2026-09-10T15:02:08-07:00 (America/Los_Angeles).
+Private MLB certification cleared the infrastructure blocker. Final 0.2.1
+prepared from the current certified successor passes source/installed-package and
+previous conformance gates, but a new actual persisted odds comparison fails on
+optional-description outcome retention, on both dev1 and final bytes. **BLOCKED;
+no release/cutover**. Read `TDL03B_FINAL_RESUME_20260910.md`. This preserves the
+executed scope of earlier certifications without extending them to the new case.
+
 TDL-03E-CI update: 2026-09-09T23:24:02-07:00 (America/Los_Angeles).
 Candidate 0.2.1.dev1 is exact-source certified: independently reproducible wheel,
 all local gates and DDC CI runs `34440886749` / `34440884123` passed. The combined
