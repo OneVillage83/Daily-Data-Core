@@ -1,5 +1,10 @@
 # TDL-03A admitted candidate handoff
 
+Continuation update: 2026-09-09T18:40:55-07:00 (America/Los_Angeles).
+TDL-03B exposed an additional persisted logical-call/error replay requirement;
+see [TDL03B_PERSISTED_REPLAY_BLOCKER_20260909.md](TDL03B_PERSISTED_REPLAY_BLOCKER_20260909.md).
+The TDL-03A evidence below remains scoped to its original admission checks.
+
 ## Disposition
 
 **TDL-03A COMPLETE: locally admitted unreleased candidate; no consumer switch.**

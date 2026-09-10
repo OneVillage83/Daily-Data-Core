@@ -2,6 +2,12 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+Continuation update: 2026-09-09T18:40:55-07:00 (America/Los_Angeles).
+TDL-03A's necessary candidate checks passed, but TDL-03B demonstrated a new durable
+logical-acquisition/error replay gap. Current release/migration remains uncertified;
+see `TDL03B_PERSISTED_REPLAY_BLOCKER_20260909.md`. Historical certifications below
+do not cover that new counterexample.
+
 Updated: 2026-09-09T16:49:00-07:00 (America/Los_Angeles).
 The historical certifications below remain recorded; newly demonstrated NWS URL,
 DST/temporal and venue validation defects require a new release. Candidate fixes
