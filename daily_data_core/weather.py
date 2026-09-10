@@ -13,8 +13,10 @@ from urllib.parse import urlsplit
 from daily_data_core.acquisition import (
     AcquisitionCapture,
     AcquisitionEvidence,
+    AcquisitionHistory,
     EvidenceLedger,
     ProviderAcquisitionError,
+    normalized_fingerprint,
 )
 from daily_data_core.http import JsonHttpClient
 from daily_data_core.providers import ProviderPayload
@@ -193,6 +195,7 @@ class WeatherAcquisitionResult:
     raw_payloads: tuple[ProviderPayload, ...]
     evidence: tuple[AcquisitionEvidence, ...] = ()
     warnings: tuple[str, ...] = ()
+    history: AcquisitionHistory | None = None
 
     def require_window(self, target: datetime, maximum_seconds: float) -> None:
         if not math.isfinite(maximum_seconds) or maximum_seconds < 0:
@@ -359,8 +362,11 @@ class NwsWeatherClient:
                 forecast=snapshot,
                 raw_payloads=tuple(capture.payloads),
                 evidence=capture.finish(
-                    "partial" if capture.diagnostic_codes else "complete", capture.diagnostic_codes
+                    "partial" if capture.diagnostic_codes else "complete",
+                    capture.diagnostic_codes,
+                    normalized_fingerprint(asdict(snapshot)),
                 ),
+                history=capture.history,
                 warnings=capture.diagnostic_codes,
             )
 
@@ -455,7 +461,10 @@ class OpenWeatherClient:
             return WeatherAcquisitionResult(
                 forecast=snapshot,
                 raw_payloads=tuple(capture.payloads),
-                evidence=capture.finish("complete"),
+                evidence=capture.finish(
+                    "complete", normalized_digest=normalized_fingerprint(asdict(snapshot))
+                ),
+                history=capture.history,
             )
 
 

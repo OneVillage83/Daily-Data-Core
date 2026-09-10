@@ -11,18 +11,31 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from types import TracebackType
-from typing import Literal, cast
+from typing import Any, Literal, cast
+from uuid import uuid4
 
+from daily_data_core.history import (
+    LogicalCall,
+    PhysicalAttempt,
+    ReplayMismatchError,
+    canonical,
+    code_identity,
+    digest,
+    read_payload,
+)
 from daily_data_core.http import (
+    HttpClient,
     HttpError,
     HttpRequestDiagnostics,
     JsonHttpClient,
     JsonHttpResult,
+    diagnostics_for_call,
     redact_url,
 )
 from daily_data_core.provenance import FileSystemRawEvidenceStore, sha256_bytes
 from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import TemporalProvenance, as_utc
+from daily_data_core.version import __version__
 
 type Disposition = Literal["received", "complete", "partial", "schema_error", "http_error"]
 
@@ -32,6 +45,12 @@ class ProviderAcquisitionError(RuntimeError):
         super().__init__(message)
         self.raw_payloads: tuple[ProviderPayload, ...] = ()
         self.evidence: tuple[AcquisitionEvidence, ...] = ()
+        self.diagnostics: HttpRequestDiagnostics | None = None
+        self.history: AcquisitionHistory | None = None
+
+    @property
+    def quota(self) -> dict[str, str | None]:
+        return dict(self.diagnostics.quota_headers) if self.diagnostics else {}
 
     @property
     def raw_payload(self) -> ProviderPayload | None:
@@ -129,9 +148,200 @@ def _canonical(value: object) -> bytes:
 
 
 @dataclass(frozen=True, slots=True)
+class AcquisitionHistory:
+    acquisition_id: str
+    provider_id: str
+    dataset_key: str
+    parser_version: str
+    started_at: datetime
+    completed_at: datetime
+    calls: tuple[LogicalCall, ...]
+    disposition: Disposition
+    diagnostic_codes: tuple[str, ...]
+    evidence: tuple[AcquisitionEvidence, ...]
+    normalized_digest: str | None
+    previous_history_id: str | None = None
+    package_version: str = __version__
+    source_code_identity: str = ""
+
+    def __post_init__(self) -> None:
+        if as_utc(self.completed_at) < as_utc(self.started_at):
+            raise ValueError("acquisition history clocks run backwards")
+        if len({call.call_id for call in self.calls}) != len(self.calls):
+            raise ValueError("duplicate logical call in acquisition history")
+
+    def document(self) -> dict[str, object]:
+        return {
+            "schema": "ddc-acquisition-history-v3",
+            "acquisition_id": self.acquisition_id,
+            "provider_id": self.provider_id,
+            "dataset_key": self.dataset_key,
+            "parser_version": self.parser_version,
+            "started_at": self.started_at.isoformat(),
+            "completed_at": self.completed_at.isoformat(),
+            "call_receipts": [c.receipt_id for c in self.calls],
+            "request_diagnostics": [c.diagnostics_document() for c in self.calls],
+            "disposition": self.disposition,
+            "diagnostic_codes": list(self.diagnostic_codes),
+            "evidence_receipts": [e.receipt_id for e in self.evidence],
+            "normalized_digest": self.normalized_digest,
+            "previous_history_id": self.previous_history_id,
+            "package_version": self.package_version,
+            "source_code_identity": self.source_code_identity,
+        }
+
+    @property
+    def receipt_id(self) -> str:
+        return digest(self.document())
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceLedger:
     store: FileSystemRawEvidenceStore
     retention_allowed: Callable[[AcquisitionEvidence], bool]
+    history_retention_allowed: Callable[[dict[str, object]], bool] | None = None
+
+    def _history_put(
+        self, kind: str, identity: str, document: dict[str, object], timestamp: datetime
+    ) -> str | None:
+        if self.history_retention_allowed is None or not self.history_retention_allowed(document):
+            return None
+        receipt = digest(document)
+        self.store.bind_identity(kind, digest(identity), receipt)
+        self.store.put(
+            "ddc_receipts",
+            kind,
+            ProviderPayload(
+                canonical(document),
+                "application/json",
+                None,
+                TemporalProvenance(timestamp, timestamp),
+            ),
+        )
+        return receipt
+
+    def put_attempt(
+        self, attempt: PhysicalAttempt, provider: str, dataset: str, parser_version: str
+    ) -> str | None:
+        if attempt.payload is not None:
+            evidence = AcquisitionEvidence(
+                provider, dataset, parser_version, attempt.payload, "received", attempt.completed_at
+            )
+            if not self.retention_allowed(evidence):
+                return None
+            self.store.put(provider, dataset, attempt.payload)
+        return self._history_put(
+            "attempt_v1", attempt.attempt_id, attempt.document(), attempt.completed_at
+        )
+
+    def put_call(self, call: LogicalCall, parser_version: str) -> str | None:
+        if any(
+            self.put_attempt(a, call.provider_id, call.operation, parser_version) is None
+            for a in call.attempts
+        ):
+            return None
+        return self._history_put("call_v1", call.call_id, call.document(), call.completed_at)
+
+    def put_history(self, history: AcquisitionHistory) -> str | None:
+        if not history.calls:
+            return None  # A response-only client cannot invent physical request history.
+        if history.previous_history_id is not None:
+            self.read_history(history.previous_history_id)
+        if any(self.put_call(c, history.parser_version) is None for c in history.calls):
+            return None
+        if any(self.put(e) is None for e in history.evidence):
+            return None
+        return self._history_put(
+            "history_v3", history.acquisition_id, history.document(), history.completed_at
+        )
+
+    def read_call(self, receipt_id: str) -> LogicalCall:
+        doc = json.loads(self.store.read("ddc_receipts", "call_v1", receipt_id))
+        if doc["schema"] != "ddc-logical-call-v1":
+            raise ReplayMismatchError("unsupported logical call schema")
+        attempts: list[PhysicalAttempt] = []
+        for item in doc["attempts"]:
+            recorded = self.store.read("ddc_receipts", "attempt_v1", digest(item))
+            if json.loads(recorded) != item:
+                raise ReplayMismatchError("attempt reference mismatch")
+            body = item["payload"]
+            payload = (
+                None
+                if body is None
+                else read_payload(
+                    body, self.store.read(doc["provider_id"], doc["operation"], body["sha256"])
+                )
+            )
+            attempt = PhysicalAttempt(
+                item["call_id"],
+                item["ordinal"],
+                datetime.fromisoformat(item["started_at"]),
+                datetime.fromisoformat(item["completed_at"]),
+                item["outcome"],
+                item["status_code"],
+                item["error_type"],
+                tuple(sorted(item["quota"].items())),
+                item["retryable"],
+                item["will_retry"],
+                item["delay_seconds"],
+                payload,
+            )
+            if attempt.document() != item:
+                raise ReplayMismatchError("attempt identity mismatch")
+            self.store.verify_identity("attempt_v1", digest(attempt.attempt_id), digest(item))
+            attempts.append(attempt)
+        call = LogicalCall(
+            doc["call_id"],
+            doc["provider_id"],
+            doc["operation"],
+            doc["safe_request"],
+            datetime.fromisoformat(doc["started_at"]),
+            datetime.fromisoformat(doc["completed_at"]),
+            doc["timeout_seconds"],
+            doc["max_attempts"],
+            doc["retry_cap_seconds"],
+            doc["retry_schema_errors"],
+            doc["validator_version"],
+            tuple(attempts),
+            doc["duration_seconds"],
+            doc["source_run_id"],
+            doc["package_version"],
+            doc["source_code_identity"],
+        )
+        if call.receipt_id != receipt_id:
+            raise ReplayMismatchError("logical call identity mismatch")
+        self.store.verify_identity("call_v1", digest(call.call_id), receipt_id)
+        return call
+
+    def read_history(self, receipt_id: str) -> AcquisitionHistory:
+        try:
+            doc = json.loads(self.store.read("ddc_receipts", "history_v3", receipt_id))
+        except FileNotFoundError:
+            raise ReplayMismatchError(
+                "missing v3 history; response-only receipts cannot reconstruct calls"
+            ) from None
+        if doc["schema"] != "ddc-acquisition-history-v3":
+            raise ReplayMismatchError("strict replay requires versioned logical-call history")
+        history = AcquisitionHistory(
+            doc["acquisition_id"],
+            doc["provider_id"],
+            doc["dataset_key"],
+            doc["parser_version"],
+            datetime.fromisoformat(doc["started_at"]),
+            datetime.fromisoformat(doc["completed_at"]),
+            tuple(self.read_call(ref) for ref in doc["call_receipts"]),
+            doc["disposition"],
+            tuple(doc["diagnostic_codes"]),
+            tuple(self.read(ref) for ref in doc["evidence_receipts"]),
+            doc["normalized_digest"],
+            doc["previous_history_id"],
+            doc["package_version"],
+            doc["source_code_identity"],
+        )
+        if history.receipt_id != receipt_id:
+            raise ReplayMismatchError("acquisition history identity mismatch")
+        self.store.verify_identity("history_v3", digest(history.acquisition_id), receipt_id)
+        return history
 
     def put(self, evidence: AcquisitionEvidence) -> str | None:
         # Denied means no bytes, hash or metadata are written. No implicit licence grant.
@@ -209,9 +419,42 @@ class AcquisitionCapture:
         self.payloads: list[ProviderPayload] = []
         self.evidence: list[AcquisitionEvidence] = []
         self.diagnostic_codes: tuple[str, ...] = ()
+        self.acquisition_id = uuid4().hex
+        self.started_at = datetime.now(UTC)
+        self.calls: list[LogicalCall] = []
+        self.diagnostics: HttpRequestDiagnostics | None = None
+        self.history: AcquisitionHistory | None = None
+        if isinstance(http, AcquisitionReplayClient):
+            http.bind(provider_id, dataset_key, parser_version)
 
     def __enter__(self) -> AcquisitionCapture:
         return self
+
+    def received(self, payload: ProviderPayload) -> None:
+        if isinstance(self.http, AcquisitionReplayClient) and self.http.mode == "strict":
+            self.payloads.append(
+                replace(
+                    payload,
+                    provider_schema_version=self.provider_schema_version
+                    or payload.provider_schema_version,
+                )
+            )
+            return
+        self._capture(payload)
+
+    def attempted(self, attempt: PhysicalAttempt) -> None:
+        if self.ledger:
+            self.ledger.put_attempt(
+                attempt, self.provider_id, self.dataset_key, self.parser_version
+            )
+
+    def completed(self, call: LogicalCall) -> None:
+        self.calls.append(call)
+        self.diagnostics = diagnostics_for_call(call)
+        if self.ledger and not (
+            isinstance(self.http, AcquisitionReplayClient) and self.http.mode == "strict"
+        ):
+            self.ledger.put_call(call, self.parser_version)
 
     def _capture(self, payload: ProviderPayload) -> None:
         payload = replace(
@@ -239,12 +482,29 @@ class AcquisitionCapture:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> JsonHttpResult:
+        recorded = isinstance(self.http, (HttpClient, AcquisitionReplayClient))
         try:
-            result = self.http.get_json(url, params=params, headers=headers)
+            if isinstance(self.http, (HttpClient, AcquisitionReplayClient)):
+                result = self.http.get_json_recorded(
+                    url,
+                    params=params,
+                    headers=headers,
+                    observer=self,
+                    provider_id=self.provider_id,
+                    operation=self.dataset_key,
+                    source_run_id=self.acquisition_id,
+                )
+            else:
+                result = self.http.get_json(url, params=params, headers=headers)
         except HttpError as exc:
-            for payload in exc.raw_payloads:
-                self._capture(payload)
+            self.diagnostics = exc.diagnostics
+            if not recorded:
+                for payload in exc.raw_payloads:
+                    self._capture(payload)
             raise
+        self.diagnostics = result.diagnostics
+        if recorded:
+            return result
         if result.raw_payloads:
             for payload in result.raw_payloads:
                 self._capture(payload)
@@ -266,8 +526,15 @@ class AcquisitionCapture:
         return replace(result, raw_payloads=(self.payloads[-1],))
 
     def finish(
-        self, disposition: Disposition, diagnostic_codes: tuple[str, ...] = ()
+        self,
+        disposition: Disposition,
+        diagnostic_codes: tuple[str, ...] = (),
+        normalized_digest: str | None = None,
     ) -> tuple[AcquisitionEvidence, ...]:
+        if isinstance(self.http, AcquisitionReplayClient) and self.http.mode == "strict":
+            self.http.verify(disposition, diagnostic_codes, normalized_digest)
+            self.history = self.http.history
+            return self.history.evidence
         receipts = tuple(
             replace(
                 item,
@@ -283,6 +550,25 @@ class AcquisitionCapture:
         if self.ledger:
             for receipt in receipts:
                 self.ledger.put(receipt)
+        self.history = AcquisitionHistory(
+            self.acquisition_id,
+            self.provider_id,
+            self.dataset_key,
+            self.parser_version,
+            self.started_at,
+            datetime.now(UTC),
+            tuple(self.calls),
+            disposition,
+            diagnostic_codes,
+            receipts,
+            normalized_digest,
+            self.http.history.receipt_id
+            if isinstance(self.http, AcquisitionReplayClient)
+            else None,
+            source_code_identity=code_identity(),
+        )
+        if self.ledger:
+            self.ledger.put_history(self.history)
         return receipts
 
     def __exit__(
@@ -292,6 +578,8 @@ class AcquisitionCapture:
         traceback: TracebackType | None,
     ) -> None:
         if isinstance(exc, Exception):
+            if isinstance(exc, ReplayMismatchError):
+                return
             disposition: Disposition = (
                 "http_error" if isinstance(exc, HttpError) else "schema_error"
             )
@@ -300,17 +588,143 @@ class AcquisitionCapture:
             if isinstance(exc, (ProviderAcquisitionError, HttpError)):
                 exc.raw_payloads = tuple(self.payloads)
                 exc.evidence = evidence
+                exc.diagnostics = self.diagnostics
+                exc.history = self.history
             else:
                 failure = ProviderAcquisitionError(
                     "Provider normalization failed: " + type(exc).__name__
                 )
                 failure.raw_payloads = tuple(self.payloads)
                 failure.evidence = evidence
+                failure.diagnostics = self.diagnostics
+                failure.history = self.history
                 raise failure from None
 
 
+def normalized_fingerprint(value: object) -> str:
+    """Deterministic interpretation digest, separate from exact provider bytes."""
+
+    def encode(item: object) -> object:
+        if isinstance(item, datetime):
+            return as_utc(item).isoformat()
+        raise TypeError("unsupported normalized fingerprint value")
+
+    return sha256_bytes(
+        json.dumps(
+            value, default=encode, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    )
+
+
+class AcquisitionReplayClient:
+    """Recorded logical-call playback. No session, sleep, transport or reacquisition path."""
+
+    def __init__(
+        self,
+        history: AcquisitionHistory,
+        *,
+        mode: Literal["strict", "reprocess"] = "strict",
+        validator_versions: frozenset[str] = frozenset(),
+    ) -> None:
+        if not isinstance(history, AcquisitionHistory) or not history.calls:
+            raise ReplayMismatchError("strict acquisition replay requires complete v3 call history")
+        if mode not in {"strict", "reprocess"}:
+            raise ValueError("unknown replay mode")
+        if mode == "strict" and (
+            history.package_version != __version__
+            or history.source_code_identity != code_identity()
+        ):
+            raise ReplayMismatchError("strict replay package/code identity mismatch")
+        if mode == "strict" and any(
+            c.validator_version is not None and c.validator_version not in validator_versions
+            for c in history.calls
+        ):
+            raise ReplayMismatchError("recorded response validator version not admitted")
+        self.history = history
+        self.mode = mode
+        self.index = 0
+        self.network_calls = 0
+
+    def bind(self, provider: str, dataset: str, parser: str) -> None:
+        if (provider, dataset) != (self.history.provider_id, self.history.dataset_key):
+            raise ReplayMismatchError("replay provider/operation mismatch")
+        if self.mode == "strict" and parser != self.history.parser_version:
+            raise ReplayMismatchError("strict replay parser version mismatch")
+
+    def verify(
+        self, disposition: Disposition, codes: tuple[str, ...], fingerprint: str | None
+    ) -> None:
+        if self.index != len(self.history.calls):
+            raise ReplayMismatchError("strict replay left logical calls unconsumed")
+        if (disposition, codes, fingerprint) != (
+            self.history.disposition,
+            self.history.diagnostic_codes,
+            self.history.normalized_digest,
+        ):
+            raise ReplayMismatchError("strict replay interpretation differs from retained evidence")
+
+    def get_json(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JsonHttpResult:
+        return self.get_json_recorded(url, params=params, headers=headers)
+
+    def get_json_recorded(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        observer: Any = None,
+        provider_id: str = "http",
+        operation: str = "get_json",
+        source_run_id: str | None = None,
+    ) -> JsonHttpResult:
+        from requests import Request
+
+        from daily_data_core.http import RetryableHttpError
+
+        if self.index >= len(self.history.calls):
+            raise ReplayMismatchError("recorded logical-call sequence exhausted")
+        call = self.history.calls[self.index]
+        safe = redact_url(Request("GET", url, params=params).prepare().url or url)
+        if safe != call.safe_request:
+            raise ReplayMismatchError("strict replay requested scope differs from recorded call")
+        self.index += 1
+        if observer is not None:
+            for attempt in call.attempts:
+                if attempt.payload is not None:
+                    observer.received(attempt.payload)
+                # Strict replay returns original evidence; it never republishes physical attempts.
+            observer.completed(call)
+        diagnostics = diagnostics_for_call(call)
+        if call.terminal_outcome != "success":
+            error_class = RetryableHttpError if call.attempts[-1].retryable else HttpError
+            raise error_class("Recorded " + call.terminal_outcome, diagnostics, call.payloads, call)
+        payload = call.attempts[-1].payload
+        assert payload is not None
+        try:
+            decoded: object = json.loads(payload.content)
+        except (ValueError, UnicodeError):
+            raise ReplayMismatchError("recorded successful response no longer decodes") from None
+        if not isinstance(decoded, (dict, list)):
+            raise ReplayMismatchError("recorded successful response has invalid root")
+        return JsonHttpResult(
+            cast(dict[str, object] | list[object], decoded),
+            payload.content,
+            payload.content_type,
+            payload.source_uri or safe,
+            diagnostics,
+            call.payloads,
+            call,
+        )
+
+
 class ReplayHttpClient:
-    """Explicit offline transport preserves original source clocks, including failed JSON."""
+    """Legacy response-only decoder; use AcquisitionReplayClient for strict call replay."""
 
     def __init__(self, payloads: tuple[ProviderPayload, ...]) -> None:
         self._payloads = iter(payloads)

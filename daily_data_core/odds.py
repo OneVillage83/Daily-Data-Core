@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import cast
 
 from daily_data_core.acquisition import (
     AcquisitionCapture,
     AcquisitionEvidence,
+    AcquisitionHistory,
     EvidenceLedger,
     ProviderAcquisitionError,
+    normalized_fingerprint,
 )
 from daily_data_core.http import HttpRequestDiagnostics, JsonHttpClient
 from daily_data_core.markets import TwoWayOffer
@@ -135,6 +137,7 @@ class OddsCollectionResult:
     quota: dict[str, str | None]
     warnings: tuple[OddsCollectionWarning, ...] = ()
     evidence: tuple[AcquisitionEvidence, ...] = ()
+    history: AcquisitionHistory | None = None
 
     @property
     def partial(self) -> bool:
@@ -514,6 +517,9 @@ class TheOddsApiClient:
                 quota=result.diagnostics.quota_headers,
                 warnings=tuple(warnings),
                 evidence=capture.finish(
-                    "partial" if warnings else "complete", capture.diagnostic_codes
+                    "partial" if warnings else "complete",
+                    capture.diagnostic_codes,
+                    normalized_fingerprint([asdict(event) for event in parsed_events]),
                 ),
+                history=capture.history,
             )

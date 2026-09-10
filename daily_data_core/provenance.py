@@ -62,6 +62,35 @@ def _validate_segment(value: str, label: str) -> None:
 class FileSystemRawEvidenceStore:
     root: Path
 
+    def bind_identity(self, namespace: str, identity: str, receipt: str) -> None:
+        """One completed history identity can refer to exactly one immutable receipt."""
+        if re.fullmatch(r"[0-9a-f]{64}", receipt) is None:
+            raise ValueError("invalid receipt binding")
+        path = self._path("ddc_history_bindings", namespace, identity)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+                temporary = Path(handle.name)
+                handle.write(receipt.encode("ascii"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.link(temporary, path)
+        except FileExistsError:
+            if path.read_bytes() != receipt.encode("ascii"):
+                raise RawEvidenceCollisionError(
+                    "completed acquisition identity cannot be rewritten"
+                ) from None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def verify_identity(self, namespace: str, identity: str, receipt: str) -> None:
+        if self._path("ddc_history_bindings", namespace, identity).read_bytes() != receipt.encode(
+            "ascii"
+        ):
+            raise RawEvidenceCollisionError("history identity binding mismatch")
+
     def _path(self, provider_id: str, dataset_key: str, digest: str) -> Path:
         _validate_segment(provider_id, "provider_id")
         _validate_segment(dataset_key, "dataset_key")

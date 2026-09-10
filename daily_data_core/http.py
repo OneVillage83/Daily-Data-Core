@@ -4,25 +4,45 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from uuid import uuid4
 
 import requests
 
+from daily_data_core.history import (
+    HistoryObserver,
+    LogicalCall,
+    PhysicalAttempt,
+    SchemaValidationError,
+    code_identity,
+)
 from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import TemporalProvenance
 
 if TYPE_CHECKING:
-    from daily_data_core.acquisition import AcquisitionEvidence
+    from daily_data_core.acquisition import AcquisitionEvidence, AcquisitionHistory
 
 type JsonPayload = dict[str, object] | list[object]
 
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _RETRY_AFTER_STATUS_CODES = frozenset({429, 503})
-_SENSITIVE_QUERY_TOKENS = ("key", "token", "secret", "password", "auth", "appid")
+_SENSITIVE_QUERY_TOKENS = (
+    "key",
+    "token",
+    "secret",
+    "password",
+    "auth",
+    "appid",
+    "cookie",
+    "session",
+    "credential",
+    "signature",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +64,7 @@ class JsonHttpResult:
     response_url: str
     diagnostics: HttpRequestDiagnostics
     raw_payloads: tuple[ProviderPayload, ...] = field(default=(), repr=False)
+    call: LogicalCall | None = None
 
 
 @runtime_checkable
@@ -63,11 +84,14 @@ class HttpError(RuntimeError):
         message: str,
         diagnostics: HttpRequestDiagnostics | None = None,
         raw_payloads: tuple[ProviderPayload, ...] = (),
+        call: LogicalCall | None = None,
     ) -> None:
         super().__init__(message)
         self.diagnostics = diagnostics
+        self.call = call
         self.raw_payloads = raw_payloads
         self.evidence: tuple[AcquisitionEvidence, ...] = ()
+        self.history: AcquisitionHistory | None = None
 
     @property
     def raw_payload(self) -> ProviderPayload | None:
@@ -75,6 +99,8 @@ class HttpError(RuntimeError):
 
     @property
     def failure_kind(self) -> str:
+        if self.call is not None:
+            return self.call.terminal_outcome
         if self.diagnostics is not None and self.diagnostics.status_code is None:
             return "transport_error"
         if self.raw_payload is None:
@@ -142,11 +168,15 @@ def _backoff_seconds(attempt: int) -> float:
     return float(min(2 ** (attempt - 1), 8))
 
 
+def _safe_quota(value: str | None) -> str | None:
+    return value if value is not None and value.isascii() and value.isdigit() else None
+
+
 def _quota_headers(response: requests.Response) -> dict[str, str | None]:
     return {
-        "requests_remaining": response.headers.get("x-requests-remaining"),
-        "requests_used": response.headers.get("x-requests-used"),
-        "requests_last": response.headers.get("x-requests-last"),
+        "requests_remaining": _safe_quota(response.headers.get("x-requests-remaining")),
+        "requests_used": _safe_quota(response.headers.get("x-requests-used")),
+        "requests_last": _safe_quota(response.headers.get("x-requests-last")),
     }
 
 
@@ -156,6 +186,9 @@ class HttpClient:
         timeout: int = 30,
         max_attempts: int = 3,
         retry_max_seconds: float = 30.0,
+        schema_validator: Callable[[JsonPayload], None] | None = None,
+        validator_version: str | None = None,
+        retry_schema_errors: bool = False,
     ) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
@@ -163,6 +196,11 @@ class HttpClient:
             raise ValueError("max_attempts must be at least one")
         if not math.isfinite(retry_max_seconds) or retry_max_seconds < 0:
             raise ValueError("retry_max_seconds must be finite and nonnegative")
+        if schema_validator is not None and not validator_version:
+            raise ValueError("schema validator requires an explicit version")
+        self.schema_validator = schema_validator
+        self.validator_version = validator_version
+        self.retry_schema_errors = retry_schema_errors
         self.timeout = timeout
         self.max_attempts = max_attempts
         self.retry_max_seconds = retry_max_seconds
@@ -175,176 +213,174 @@ class HttpClient:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> JsonHttpResult:
-        started = time.monotonic()
-        prepared_url = requests.Request("GET", url, params=params).prepare().url or url
-        safe_prepared_url = redact_url(prepared_url)
-        evidence: list[ProviderPayload] = []
+        return self.get_json_recorded(url, params=params, headers=headers)
 
-        for attempt in range(1, self.max_attempts + 1):
+    def get_json_recorded(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        observer: HistoryObserver | None = None,
+        provider_id: str = "http",
+        operation: str = "get_json",
+        source_run_id: str | None = None,
+    ) -> JsonHttpResult:
+        started = time.monotonic()
+        started_at = datetime.now(UTC)
+        call_id = uuid4().hex
+        prepared_url = requests.Request("GET", url, params=params).prepare().url or url
+        safe_request = redact_url(prepared_url)
+        attempts: list[PhysicalAttempt] = []
+        decoded: JsonPayload | None = None
+        for ordinal in range(1, self.max_attempts + 1):
+            requested_at = datetime.now(UTC)
+            payload: ProviderPayload | None = None
+            status: int | None = None
+            quota: dict[str, str | None] = {}
+            retryable = False
+            delay = 0.0
+            error_type: str | None = None
+            retry_after: str | None = None
             try:
                 response = self.session.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=self.timeout,
+                    url, params=params, headers=headers, timeout=self.timeout
                 )
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                if attempt < self.max_attempts:
-                    time.sleep(_backoff_seconds(attempt))
-                    continue
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    None,
-                    attempt,
-                    None,
-                    {},
-                )
-                raise RetryableHttpError(
-                    (f"Request failed for {safe_prepared_url}: {type(exc).__name__}"),
-                    diagnostics,
-                    tuple(evidence),
-                ) from None
             except requests.RequestException as exc:
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    None,
-                    attempt,
-                    None,
-                    {},
-                )
-                raise HttpError(
-                    (f"Request failed for {safe_prepared_url}: {type(exc).__name__}"),
-                    diagnostics,
-                    tuple(evidence),
-                ) from None
-
-            response_date = _http_date_utc(response.headers.get("Date"))
-            quota = _quota_headers(response)
-            safe_response_url = redact_url(response.url or prepared_url)
-            retrieved_at = datetime.now(UTC)
-            evidence.append(
-                ProviderPayload(
-                    content=response.content,
-                    content_type=response.headers.get("Content-Type") or "application/octet-stream",
-                    source_uri=safe_response_url,
-                    provenance=TemporalProvenance(
-                        observed_at=retrieved_at,
-                        available_at=retrieved_at,
-                        published_at=datetime.fromisoformat(response_date)
-                        if response_date
-                        else None,
+                outcome = "transport_error"
+                error_type = type(exc).__name__
+                retryable = isinstance(exc, (requests.Timeout, requests.ConnectionError))
+            else:
+                status = response.status_code
+                quota = _quota_headers(response)
+                source_date = _http_date_utc(response.headers.get("Date"))
+                retrieved_at = datetime.now(UTC)
+                payload = ProviderPayload(
+                    response.content,
+                    response.headers.get("Content-Type") or "application/octet-stream",
+                    redact_url(response.url or prepared_url),
+                    TemporalProvenance(
+                        retrieved_at,
+                        retrieved_at,
+                        published_at=datetime.fromisoformat(source_date) if source_date else None,
                     ),
-                    response_status_code=response.status_code,
+                    response_status_code=status,
                 )
+                if observer is not None:
+                    observer.received(payload)
+                retry_after = response.headers.get("Retry-After")
+                if not response.ok:
+                    outcome = "http_status_error"
+                    retryable = status in _RETRYABLE_STATUS_CODES
+                else:
+                    try:
+                        raw: object = response.json()
+                    except requests.JSONDecodeError:
+                        outcome = "json_error"
+                        retryable = self.retry_schema_errors
+                    else:
+                        if not isinstance(raw, (dict, list)):
+                            outcome = "json_error"
+                            retryable = self.retry_schema_errors
+                        else:
+                            decoded = raw
+                            outcome = "success"
+                            if self.schema_validator is not None:
+                                try:
+                                    self.schema_validator(decoded)
+                                except SchemaValidationError:
+                                    outcome = "schema_error"
+                                    retryable = self.retry_schema_errors
+                                    error_type = "SchemaValidationError"
+                                except Exception as exc:
+                                    outcome = "schema_error"
+                                    error_type = type(exc).__name__
+                                    retryable = False
+            will_retry = retryable and ordinal < self.max_attempts
+            if will_retry:
+                override = (
+                    _retry_after_seconds(retry_after, self.retry_max_seconds)
+                    if status in _RETRY_AFTER_STATUS_CODES
+                    else None
+                )
+                delay = override if override is not None else _backoff_seconds(ordinal)
+            attempt = PhysicalAttempt(
+                call_id,
+                ordinal,
+                requested_at,
+                datetime.now(UTC),
+                outcome,
+                status,
+                error_type,
+                tuple(sorted(quota.items())),
+                retryable,
+                will_retry,
+                delay,
+                payload,
             )
-            if response.status_code in _RETRYABLE_STATUS_CODES:
-                if attempt < self.max_attempts:
-                    delay = None
-                    if response.status_code in _RETRY_AFTER_STATUS_CODES:
-                        delay = _retry_after_seconds(
-                            response.headers.get("Retry-After"),
-                            self.retry_max_seconds,
-                        )
-                    time.sleep(delay if delay is not None else _backoff_seconds(attempt))
-                    continue
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    response.status_code,
-                    attempt,
-                    response_date,
-                    quota,
-                )
-                raise RetryableHttpError(
-                    (f"Temporary HTTP {response.status_code} from {safe_response_url}"),
-                    diagnostics,
-                    tuple(evidence),
-                )
-            if not response.ok:
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    response.status_code,
-                    attempt,
-                    response_date,
-                    quota,
-                )
-                raise HttpError(
-                    f"HTTP {response.status_code} from {safe_response_url}",
-                    diagnostics,
-                    tuple(evidence),
-                )
+            attempts.append(attempt)
+            if observer is not None:
+                observer.attempted(attempt)
+            if will_retry:
+                time.sleep(delay)
+                continue
+            break
 
-            try:
-                raw_payload: object = response.json()
-            except requests.JSONDecodeError:
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    response.status_code,
-                    attempt,
-                    response_date,
-                    quota,
-                )
-                raise HttpError(
-                    f"Invalid JSON from {safe_response_url}",
-                    diagnostics,
-                    tuple(evidence),
-                ) from None
-            if not isinstance(raw_payload, (dict, list)):
-                diagnostics = self._diagnostics(
-                    started,
-                    "failed",
-                    response.status_code,
-                    attempt,
-                    response_date,
-                    quota,
-                )
-                raise HttpError(
-                    f"JSON root must be object or list from {safe_response_url}",
-                    diagnostics,
-                    tuple(evidence),
-                )
-
-            diagnostics = self._diagnostics(
-                started,
-                "success",
-                response.status_code,
-                attempt,
-                response_date,
-                quota,
-            )
-            return JsonHttpResult(
-                payload=raw_payload,
-                content=response.content,
-                content_type=response.headers.get(
-                    "Content-Type",
-                    "application/json",
-                ),
-                response_url=safe_response_url,
-                diagnostics=diagnostics,
-                raw_payloads=tuple(evidence),
-            )
-
-        raise AssertionError("HTTP retry loop exited unexpectedly")
-
-    def _diagnostics(
-        self,
-        started: float,
-        request_status: str,
-        status_code: int | None,
-        attempts: int,
-        response_date_utc: str | None,
-        quota_headers: dict[str, str | None],
-    ) -> HttpRequestDiagnostics:
-        return HttpRequestDiagnostics(
-            request_status=request_status,
-            status_code=status_code,
-            attempts=attempts,
-            retries_performed=max(0, attempts - 1),
-            duration_seconds=max(0.0, time.monotonic() - started),
-            response_date_utc=response_date_utc,
-            quota_headers=quota_headers,
+        call = LogicalCall(
+            call_id,
+            provider_id,
+            operation,
+            safe_request,
+            started_at,
+            datetime.now(UTC),
+            self.timeout,
+            self.max_attempts,
+            self.retry_max_seconds,
+            self.retry_schema_errors,
+            self.validator_version,
+            tuple(attempts),
+            max(0.0, time.monotonic() - started),
+            source_run_id,
+            source_code_identity=code_identity(),
         )
+        if observer is not None:
+            observer.completed(call)
+        diagnostics = diagnostics_for_call(call)
+        if call.terminal_outcome != "success":
+            messages = {
+                "transport_error": "Request failed",
+                "http_status_error": f"HTTP {status}",
+                "json_error": "Invalid JSON",
+                "schema_error": "Response schema invalid",
+            }
+            error_class = RetryableHttpError if attempts[-1].retryable else HttpError
+            raise error_class(
+                messages[call.terminal_outcome] + " from " + safe_request,
+                diagnostics,
+                call.payloads,
+                call,
+            ) from None
+        assert decoded is not None and payload is not None
+        return JsonHttpResult(
+            decoded,
+            payload.content,
+            payload.content_type,
+            payload.source_uri or safe_request,
+            diagnostics,
+            call.payloads,
+            call,
+        )
+
+
+def diagnostics_for_call(call: LogicalCall) -> HttpRequestDiagnostics:
+    last = call.attempts[-1]
+    source_date = last.payload.provenance.published_at if last.payload else None
+    return HttpRequestDiagnostics(
+        "success" if call.terminal_outcome == "success" else "failed",
+        last.status_code,
+        len(call.attempts),
+        len(call.attempts) - 1,
+        call.duration_seconds,
+        source_date.isoformat() if source_date else None,
+        dict(last.quota),
+    )
