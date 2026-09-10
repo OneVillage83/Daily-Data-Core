@@ -123,10 +123,12 @@ class ProviderPayload:
     source_uri: str | None
     provenance: TemporalProvenance
     provider_schema_version: str | None = None
+    response_status_code: int | None = None
 
     def __post_init__(self) -> None:
-        if not self.content:
-            raise ValueError("provider payload cannot be empty")
+        # Empty received bodies are evidence too; no-response is represented by None.
+        if not isinstance(self.content, bytes):
+            raise TypeError("provider payload content must be bytes")
         _nonblank(self.content_type, "content_type")
         if self.source_uri is not None:
             _nonblank(self.source_uri, "source_uri")

@@ -1,5 +1,8 @@
 # Daily Data Core Integration Contracts
 
+Unreleased v2 acquisition/forecast evolution and migration notes:
+[LOSSLESS_ACQUISITION_V2.md](LOSSLESS_ACQUISITION_V2.md).
+
 ## Core rule
 DDC normalizes shared facts. A sport consumer maps those facts into its own canonical identity/state/features.
 

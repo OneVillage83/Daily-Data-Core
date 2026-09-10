@@ -7,14 +7,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
+from daily_data_core.acquisition import (
+    AcquisitionCapture,
+    AcquisitionEvidence,
+    EvidenceLedger,
+    ProviderAcquisitionError,
+)
 from daily_data_core.http import HttpRequestDiagnostics, JsonHttpClient
 from daily_data_core.markets import TwoWayOffer
 from daily_data_core.providers import ProviderPayload
-from daily_data_core.temporal import TemporalProvenance, as_utc, require_aware
+from daily_data_core.temporal import as_utc, require_aware
 
 THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 PROVIDER_ID = "the_odds_api"
-PARSER_VERSION = "ddc-the-odds-api-v1"
+PARSER_VERSION = "ddc-the-odds-api-v2"
 
 # Provider keys verified against The Odds API V4 sports catalogue.
 SPORT_KEYS: dict[str, str] = {
@@ -31,7 +37,7 @@ SPORT_KEYS: dict[str, str] = {
 _SUPPORTED_MARKETS = frozenset({"h2h", "spreads", "totals"})
 
 
-class OddsProviderSchemaError(RuntimeError):
+class OddsProviderSchemaError(ProviderAcquisitionError):
     pass
 
 
@@ -42,6 +48,7 @@ class OddsCollectionWarning:
     event_id: str | None = None
     bookmaker_key: str | None = None
     market_key: str | None = None
+    source_path: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +56,8 @@ class OddsOutcomeSnapshot:
     name: str
     price: float
     point: float | None = None
+    source_path: str = ""
+    participant_description: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -64,6 +73,7 @@ class OddsMarketSnapshot:
     key: str
     outcomes: tuple[OddsOutcomeSnapshot, ...]
     provider_updated_at: datetime | None = None
+    source_path: str = ""
 
     def __post_init__(self) -> None:
         if not self.key.strip():
@@ -78,6 +88,7 @@ class BookmakerSnapshot:
     title: str
     provider_updated_at: datetime | None
     markets: tuple[OddsMarketSnapshot, ...]
+    source_path: str = ""
 
     def __post_init__(self) -> None:
         if not self.key.strip() or not self.title.strip():
@@ -96,6 +107,7 @@ class OddsEventSnapshot:
     bookmakers: tuple[BookmakerSnapshot, ...]
     observed_at: datetime
     available_at: datetime
+    source_path: str = ""
 
     def __post_init__(self) -> None:
         for value, label in (
@@ -122,6 +134,11 @@ class OddsCollectionResult:
     diagnostics: HttpRequestDiagnostics
     quota: dict[str, str | None]
     warnings: tuple[OddsCollectionWarning, ...] = ()
+    evidence: tuple[AcquisitionEvidence, ...] = ()
+
+    @property
+    def partial(self) -> bool:
+        return bool(self.warnings)
 
 
 def provider_sport_key(sport: str) -> str:
@@ -188,20 +205,31 @@ def _parse_market(
     event_id: str,
     bookmaker_key: str,
     warnings: list[OddsCollectionWarning],
+    source_path: str,
 ) -> OddsMarketSnapshot | None:
     try:
         market = _object(raw, "market")
         market_key = _string(market.get("key"), "market.key")
-        provider_updated_at = _optional_timestamp(
-            market.get("last_update"),
-            "market.last_update",
-        )
+        try:
+            provider_updated_at = _optional_timestamp(
+                market.get("last_update"), "market.last_update"
+            )
+        except OddsProviderSchemaError:
+            provider_updated_at = None
+            warnings.append(
+                OddsCollectionWarning(
+                    "invalid_optional_timestamp",
+                    "market.last_update invalid",
+                    source_path=source_path + "/last_update",
+                )
+            )
         outcome_items = _list(market.get("outcomes"), "market.outcomes")
     except OddsProviderSchemaError as exc:
         warnings.append(
             OddsCollectionWarning(
                 "malformed_market",
                 str(exc),
+                source_path=source_path,
                 event_id=event_id,
                 bookmaker_key=bookmaker_key,
             )
@@ -209,7 +237,7 @@ def _parse_market(
         return None
 
     outcomes: list[OddsOutcomeSnapshot] = []
-    for raw_outcome in outcome_items:
+    for index, raw_outcome in enumerate(outcome_items):
         try:
             outcome = _object(raw_outcome, "outcome")
             outcomes.append(
@@ -217,6 +245,10 @@ def _parse_market(
                     name=_string(outcome.get("name"), "outcome.name"),
                     price=_number(outcome.get("price"), "outcome.price"),
                     point=_optional_number(outcome.get("point"), "outcome.point"),
+                    source_path=f"{source_path}/outcomes/{index}",
+                    participant_description=_string(outcome["description"], "outcome.description")
+                    if outcome.get("description") is not None
+                    else None,
                 )
             )
         except OddsProviderSchemaError as exc:
@@ -227,13 +259,13 @@ def _parse_market(
                     event_id=event_id,
                     bookmaker_key=bookmaker_key,
                     market_key=market_key,
+                    source_path=f"{source_path}/outcomes/{index}",
                 )
             )
-    if not outcomes:
-        return None
     return OddsMarketSnapshot(
         key=market_key,
         outcomes=tuple(outcomes),
+        source_path=source_path,
         provider_updated_at=provider_updated_at,
     )
 
@@ -243,43 +275,54 @@ def _parse_bookmaker(
     *,
     event_id: str,
     warnings: list[OddsCollectionWarning],
+    source_path: str,
 ) -> BookmakerSnapshot | None:
     try:
         bookmaker = _object(raw, "bookmaker")
         bookmaker_key = _string(bookmaker.get("key"), "bookmaker.key")
         title = _string(bookmaker.get("title"), "bookmaker.title")
-        provider_updated_at = _optional_timestamp(
-            bookmaker.get("last_update"),
-            "bookmaker.last_update",
-        )
+        try:
+            provider_updated_at = _optional_timestamp(
+                bookmaker.get("last_update"), "bookmaker.last_update"
+            )
+        except OddsProviderSchemaError:
+            provider_updated_at = None
+            warnings.append(
+                OddsCollectionWarning(
+                    "invalid_optional_timestamp",
+                    "bookmaker.last_update invalid",
+                    source_path=source_path + "/last_update",
+                )
+            )
         market_items = _list(bookmaker.get("markets"), "bookmaker.markets")
     except OddsProviderSchemaError as exc:
         warnings.append(
             OddsCollectionWarning(
                 "malformed_bookmaker",
                 str(exc),
+                source_path=source_path,
                 event_id=event_id,
             )
         )
         return None
 
     parsed_markets: list[OddsMarketSnapshot] = []
-    for item in market_items:
+    for index, item in enumerate(market_items):
         parsed = _parse_market(
             item,
             event_id=event_id,
             bookmaker_key=bookmaker_key,
             warnings=warnings,
+            source_path=f"{source_path}/markets/{index}",
         )
         if parsed is not None:
             parsed_markets.append(parsed)
-    if not parsed_markets:
-        return None
     return BookmakerSnapshot(
         key=bookmaker_key,
         title=title,
         provider_updated_at=provider_updated_at,
         markets=tuple(parsed_markets),
+        source_path=source_path,
     )
 
 
@@ -289,6 +332,7 @@ def _parse_event(
     expected_sport_key: str,
     observed_at: datetime,
     warnings: list[OddsCollectionWarning],
+    source_path: str,
 ) -> OddsEventSnapshot | None:
     event_id: str | None = None
     try:
@@ -299,9 +343,7 @@ def _parse_event(
         parsed_event_id = _string(raw_event_id, "event.id")
         sport_key = _string(event.get("sport_key"), "event.sport_key")
         if sport_key != expected_sport_key:
-            raise OddsProviderSchemaError(
-                "event.sport_key does not match the requested sport"
-            )
+            raise OddsProviderSchemaError("event.sport_key does not match the requested sport")
         commence_time = _timestamp(
             event.get("commence_time"),
             "event.commence_time",
@@ -316,22 +358,25 @@ def _parse_event(
             OddsCollectionWarning(
                 "malformed_event",
                 str(exc),
+                source_path=source_path,
                 event_id=event_id,
             )
         )
         return None
 
     parsed_bookmakers: list[BookmakerSnapshot] = []
-    for item in bookmaker_items:
+    for index, item in enumerate(bookmaker_items):
         parsed = _parse_bookmaker(
             item,
             event_id=parsed_event_id,
             warnings=warnings,
+            source_path=f"{source_path}/bookmakers/{index}",
         )
         if parsed is not None:
             parsed_bookmakers.append(parsed)
     return OddsEventSnapshot(
         provider_event_id=parsed_event_id,
+        source_path=source_path,
         sport_key=sport_key,
         commence_time=commence_time,
         home_participant=home,
@@ -366,12 +411,7 @@ def group_two_way_offers(
                 second_name = event.away_participant
                 home = by_name.get(first_name)
                 away = by_name.get(second_name)
-                if (
-                    home is None
-                    or away is None
-                    or home.point is None
-                    or away.point is None
-                ):
+                if home is None or away is None or home.point is None or away.point is None:
                     continue
                 if not math.isclose(home.point, -away.point, abs_tol=1e-9):
                     continue
@@ -381,12 +421,7 @@ def group_two_way_offers(
                 second_name = "Under"
                 over = by_name.get(first_name)
                 under = by_name.get(second_name)
-                if (
-                    over is None
-                    or under is None
-                    or over.point is None
-                    or under.point is None
-                ):
+                if over is None or under is None or over.point is None or under.point is None:
                     continue
                 if not math.isclose(over.point, under.point, abs_tol=1e-9):
                     continue
@@ -405,17 +440,16 @@ def group_two_way_offers(
                 first_price=first.price,
                 second_price=second.price,
                 line=line,
-                provider_updated_at=(
-                    market.provider_updated_at or bookmaker.provider_updated_at
-                ),
+                provider_updated_at=(market.provider_updated_at or bookmaker.provider_updated_at),
             )
             grouped.setdefault(line, []).append(offer)
     return {line: tuple(offers) for line, offers in grouped.items()}
 
 
 class TheOddsApiClient:
-    def __init__(self, http: JsonHttpClient) -> None:
+    def __init__(self, http: JsonHttpClient, ledger: EvidenceLedger | None = None) -> None:
         self.http = http
+        self.ledger = ledger
 
     def collect(
         self,
@@ -431,61 +465,55 @@ class TheOddsApiClient:
             raise ValueError("api_key cannot be blank")
         if not regions or any(not region.strip() for region in regions):
             raise ValueError("regions must contain nonblank values")
-        if not markets or any(
-            market not in _SUPPORTED_MARKETS for market in markets
-        ):
-            raise ValueError(
-                "markets must be a nonempty subset of h2h, spreads, totals"
-            )
+        if not markets or any(market not in _SUPPORTED_MARKETS for market in markets):
+            raise ValueError("markets must be a nonempty subset of h2h, spreads, totals")
         if len(regions) != len(set(regions)):
             raise ValueError("regions cannot contain duplicates")
         if len(markets) != len(set(markets)):
             raise ValueError("markets cannot contain duplicates")
 
-        result = self.http.get_json(
-            f"{THE_ODDS_API_BASE}/{sport_key}/odds/",
-            params={
-                "apiKey": api_key,
-                "regions": ",".join(regions),
-                "markets": ",".join(markets),
-                "oddsFormat": "american",
-                "dateFormat": "iso",
-            },
-        )
-        if not isinstance(result.payload, list):
-            raise OddsProviderSchemaError(
-                "The Odds API odds root must be a list"
+        with AcquisitionCapture(
+            self.http, PROVIDER_ID, "odds", PARSER_VERSION, self.ledger, "v4"
+        ) as capture:
+            result = capture.get_json(
+                f"{THE_ODDS_API_BASE}/{sport_key}/odds/",
+                params={
+                    "apiKey": api_key,
+                    "regions": ",".join(regions),
+                    "markets": ",".join(markets),
+                    "oddsFormat": "american",
+                    "dateFormat": "iso",
+                },
             )
-        observed_at = datetime.now(UTC)
-        warnings: list[OddsCollectionWarning] = []
-        parsed_events: list[OddsEventSnapshot] = []
-        for item in result.payload:
-            parsed = _parse_event(
-                item,
-                expected_sport_key=sport_key,
-                observed_at=observed_at,
-                warnings=warnings,
+            raw_payload = capture.payloads[-1]
+            if not isinstance(result.payload, list):
+                capture.diagnostic_codes = ("invalid_root_expected_list",)
+                raise OddsProviderSchemaError("The Odds API odds root must be a list")
+            observed_at = raw_payload.provenance.observed_at
+            warnings: list[OddsCollectionWarning] = []
+            parsed_events: list[OddsEventSnapshot] = []
+            for index, item in enumerate(result.payload):
+                parsed = _parse_event(
+                    item,
+                    expected_sport_key=sport_key,
+                    observed_at=observed_at,
+                    warnings=warnings,
+                    source_path=f"/{index}",
+                )
+                if parsed is not None:
+                    parsed_events.append(parsed)
+            capture.diagnostic_codes = tuple(f"{w.code}:{w.source_path}" for w in warnings)
+            if result.payload and not parsed_events:
+                raise OddsProviderSchemaError(
+                    "The Odds API payload contained no structurally valid events"
+                )
+            return OddsCollectionResult(
+                events=tuple(parsed_events),
+                raw_payload=raw_payload,
+                diagnostics=result.diagnostics,
+                quota=result.diagnostics.quota_headers,
+                warnings=tuple(warnings),
+                evidence=capture.finish(
+                    "partial" if warnings else "complete", capture.diagnostic_codes
+                ),
             )
-            if parsed is not None:
-                parsed_events.append(parsed)
-        if result.payload and not parsed_events:
-            raise OddsProviderSchemaError(
-                "The Odds API payload contained no structurally valid events"
-            )
-        raw_payload = ProviderPayload(
-            content=result.content,
-            content_type=result.content_type,
-            source_uri=result.response_url,
-            provenance=TemporalProvenance(
-                observed_at=observed_at,
-                available_at=observed_at,
-            ),
-            provider_schema_version="v4",
-        )
-        return OddsCollectionResult(
-            events=tuple(parsed_events),
-            raw_payload=raw_payload,
-            diagnostics=result.diagnostics,
-            quota=result.diagnostics.quota_headers,
-            warnings=tuple(warnings),
-        )
