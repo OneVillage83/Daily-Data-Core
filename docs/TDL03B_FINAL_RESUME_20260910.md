@@ -74,6 +74,10 @@ malformed. The source bytes are preserved, yet normalized outcome membership,
 ordinal and durable event identity differ. Both the certified 0.2.1.dev1 wheel
 and prepared final 0.2.1 reproduce this discrepancy with zero network calls.
 It is not caused by final packaging, CI capacity, or lost HTTP history.
+Private probe implementation: `c8859abecea222fddc45109f71cc7b858b27c4a8`, tree
+`95198476c020eb805416b5386eb476f33dfc1929`, in Daily-MLB PR #75. Subsequent
+receipts change documentation only. DDC package source stays 9273b17 above;
+later DDC receipt commits do not change the wheel bytes.
 
 This is a synthetic malformed-input counterexample, not an assertion that a live
 provider returned it. Private fixture/source/SQLite receipts remain in Daily-MLB;
