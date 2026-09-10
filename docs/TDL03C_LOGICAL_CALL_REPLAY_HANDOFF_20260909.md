@@ -1,5 +1,10 @@
 # TDL-03C logical-call and physical-attempt replay
 
+Continuation: 2026-09-09T20:23:14-07:00 (America/Los_Angeles).
+TDL-03B resume found a redirect physical-exchange gap outside the tests recorded
+below. Release/cutover is withheld; see
+[current blocker](TDL03B_RESUME_REDIRECT_EVIDENCE_BLOCKER_20260909.md).
+
 Updated: 2026-09-09T19:29:53-07:00 (America/Los_Angeles).
 
 Branch: `codex/ddc6-mlb-migration-20260909`; parent

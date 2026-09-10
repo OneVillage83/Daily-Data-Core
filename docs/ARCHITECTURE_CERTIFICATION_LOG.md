@@ -2,6 +2,14 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03B resume update: 2026-09-09T20:23:14-07:00 (America/Los_Angeles).
+**Release/cutover BLOCKED** by a new physical-exchange evidence counterexample:
+Requests automatically follows a 302 to 200, but DDC retains only the final exchange,
+losing the redirect body and quota observation. Earlier certification remains scoped
+to its executed tests and does not cover this path. See
+`TDL03B_RESUME_REDIRECT_EVIDENCE_BLOCKER_20260909.md`. No release or consumer
+switch was performed; fix the shared contract and revalidate a new candidate first.
+
 TDL-03C operator update: 2026-09-09T19:58:31-07:00 (America/Los_Angeles).
 Candidate 0.2.0.dev2 source tree `016d50e42aad77ec1841605fe97a1ddca69b769a`
 passed reproducible-wheel, persisted replay, DDC-6 compatibility and hosted Linux
