@@ -2,6 +2,16 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03C operator update: 2026-09-09T19:58:31-07:00 (America/Los_Angeles).
+Candidate 0.2.0.dev2 source tree `016d50e42aad77ec1841605fe97a1ddca69b769a`
+passed reproducible-wheel, persisted replay, DDC-6 compatibility and hosted Linux
+quality validation. GitHub Actions run `34431413425`, quality job `102727522350`,
+tested the identical tree through CI-only descendant
+`25732fe44190dde48f76c6c493d889c4c8486988`; all required steps passed. TDL-03C is
+**CERTIFIED-FOR-TDL-03B-RESUME**. DDC-6 remains IN PROGRESS: main merge, immutable
+release, real-provider validation and consumer cutover retain their existing gates.
+See `TDL03C_LOGICAL_CALL_REPLAY_HANDOFF_20260909.md`.
+
 Continuation update: 2026-09-09T18:40:55-07:00 (America/Los_Angeles).
 TDL-03A's necessary candidate checks passed, but TDL-03B demonstrated a new durable
 logical-acquisition/error replay gap. Current release/migration remains uncertified;

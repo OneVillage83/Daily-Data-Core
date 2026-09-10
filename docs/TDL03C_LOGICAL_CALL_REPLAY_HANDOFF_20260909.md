@@ -133,3 +133,52 @@ without changing production behavior. No merge/release/cutover is authorized her
 **TDL-03C COMPLETE locally. TDL-03B READY to resume** its existing certification,
 immutable-release and consumer-adapter admission sequence. Release certification,
 real-provider checks and eventual consumer migration remain future work.
+
+## Exact-head operator validation — 2026-09-09T19:58:31-07:00
+
+The operator revalidated authoritative source head
+`7e476c6a06479ea16f1fb1d83616678a0e3153a8`, tree
+`016d50e42aad77ec1841605fe97a1ddca69b769a`, from a clean worktree. The
+implementation-to-head difference remains exactly the three previously recorded
+documentation files. Dependency identities were unchanged:
+
+- `requirements.in`: `02576af24c163c644a00692fbd719a6e93b8d8ffcdeea9ad7fb7ba1278e3ab5c`
+- `requirements.txt`: `7519ae45a78d9a4a490071a070ca1f72081990439bcf925c9ec5a8bba86ff2af`
+- `requirements-dev.in`: `186408f6cc4966cab00d06019736f75b3f4fa863a8954ba12da6cc523dc027d9`
+- `requirements-dev.txt`: `10fe722048eae1881dffb1ae48c804cd953667b163ebd8ba446a4ba676071e2f`
+
+Two new clean Git-archive builds again produced version `0.2.0.dev2` and SHA-256
+`f8831a6f4f1a726b41d1b72a4b7196cf1e100fd8b41d7137786452005a7e6a5a`.
+The wheel contains only the 14 expected package files plus four distribution-metadata
+files. A new clean hash-locked install imported version 0.2.0.dev2 from its isolated
+`site-packages`, with no editable or source-tree fallback; `pip check` passed.
+
+Fresh local results: DDC source **85 passed**, isolated installed wheel **85 passed**,
+Ruff passed, strict mypy passed (**24 files**), lock regeneration produced zero diff,
+the vulnerability audit found no known vulnerabilities, and the **52-file** secret
+scan found nothing. Private consumer validation against this rebuilt wheel passed:
+persisted replay **10/10** with actual strict-replay network calls **0**, admission
+**7/7**, current-legacy equivalence **80/80**, retained oracle **119 passed**, full
+Ruff passed, strict mypy passed (**765 files**), and the **1,055-file** secret scan
+found nothing. MLB production dependencies and runtime remained unchanged.
+
+The source head's `[skip ci]` message correctly suppressed a direct Actions run.
+To exercise hosted CI without changing its tree, CI-only descendant
+`25732fe44190dde48f76c6c493d889c4c8486988` was created on branch
+`codex/tdl03c-ci-validation-20260909`. It has the exact authoritative tree above.
+GitHub Actions workflow **CI**, run **34431413425**, quality job **102727522350**,
+completed **SUCCESS** on Ubuntu/Python 3.12.14. Hash-locked installation, lock-drift
+check, **85 tests**, Ruff, and mypy (**13 package source files**) all passed; no job
+or required step was skipped.
+
+DDC has no Dockerfile, Compose file, container workflow, or Docker release requirement.
+Therefore Docker is **not applicable** to this pure-Python wheel gate; no container
+certification is claimed. No public mirror was needed because validation ran in the
+authoritative DDC repository. No live-provider request, release, tag, merge, consumer
+switch, or model/scientific change occurred.
+
+Disposition: **CERTIFIED-FOR-TDL-03B-RESUME**. The candidate's exact-source-tree,
+package, replay, compatibility, security and hosted quality gates are green. This
+certifies resumption of TDL-03B's controlled main/certification and immutable-release
+sequence; it does not itself merge, publish 0.2.0, or authorize an MLB cutover before
+the remaining release and consumer gates in PACKAGE_RELEASE_POLICY are completed.
