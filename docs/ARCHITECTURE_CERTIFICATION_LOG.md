@@ -2,6 +2,13 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03E-CI update: 2026-09-09T23:24:02-07:00 (America/Los_Angeles).
+Candidate 0.2.1.dev1 is exact-source certified: independently reproducible wheel,
+all local gates and DDC CI runs `34440886749` / `34440884123` passed. The combined
+migration disposition remains `LOCALLY-VALIDATED-REMOTE-CERTIFICATION-BLOCKED`
+because private MLB run `34440983309` executed zero steps under the account billing
+restriction. Read `TDL03E_CI_CERTIFICATION_20260909.md`. No release or cutover.
+
 TDL-03E update: 2026-09-09T22:06:11-07:00 (America/Los_Angeles).
 Forecast-window lineage repair is locally admitted at 0.2.1.dev1: original weather
 gate 13/13 and all prior DDC-6 gates pass. Read

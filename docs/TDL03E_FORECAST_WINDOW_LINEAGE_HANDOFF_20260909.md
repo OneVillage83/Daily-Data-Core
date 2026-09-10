@@ -1,5 +1,9 @@
 # TDL-03E forecast-window lineage repair
 
+Certification continuation: read `TDL03E_CI_CERTIFICATION_20260909.md`. DDC exact
+source and candidate passed hosted CI; required private MLB exact-head CI remains
+blocked before steps by account billing/spending limits. TDL-03B-FINAL is not ready.
+
 Updated: 2026-09-09T22:06:11-07:00 (America/Los_Angeles).
 
 DDC branch `codex/ddc6-mlb-migration-20260909`, draft PR #4; parent documentation
