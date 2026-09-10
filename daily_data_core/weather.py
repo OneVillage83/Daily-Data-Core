@@ -18,7 +18,8 @@ from daily_data_core.acquisition import (
     ProviderAcquisitionError,
     normalized_fingerprint,
 )
-from daily_data_core.http import JsonHttpClient
+from daily_data_core.history import code_identity, digest
+from daily_data_core.http import HttpRequestDiagnostics, JsonHttpClient, diagnostics_for_call
 from daily_data_core.providers import ProviderPayload
 from daily_data_core.temporal import as_utc, require_aware
 
@@ -44,6 +45,49 @@ CARDINAL_DEGREES: dict[str, float] = {
 
 class WeatherProviderSchemaError(ProviderAcquisitionError):
     pass
+
+
+class WeatherWindowRejected(WeatherProviderSchemaError):
+    """Consumer-supplied temporal constraint rejected a successfully acquired fact.
+
+    The base class is retained for compatibility; this is not an acquisition failure.
+    """
+
+    def __init__(self, evaluation: ForecastWindowEvaluation) -> None:
+        super().__init__("forecast outside requested selection window")
+        self.evaluation = evaluation
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastWindowEvaluation:
+    forecast_id: str
+    history_id: str | None
+    target: datetime
+    maximum_seconds: float
+    offset_seconds: float
+
+    @property
+    def reason(self) -> str:
+        if self.offset_seconds < -self.maximum_seconds:
+            return "forecast_before_window"
+        if self.offset_seconds > self.maximum_seconds:
+            return "forecast_after_window"
+        return "accepted"
+
+    def document(self) -> dict[str, object]:
+        return {
+            "schema": "ddc-forecast-window-evaluation-v1",
+            "forecast_id": self.forecast_id,
+            "history_id": self.history_id,
+            "target": as_utc(self.target).isoformat(),
+            "maximum_seconds": self.maximum_seconds,
+            "offset_seconds": self.offset_seconds,
+            "reason": self.reason,
+        }
+
+    @property
+    def receipt_id(self) -> str:
+        return digest(self.document())
 
 
 def validated_nws_hourly_url(value: object) -> str:
@@ -197,16 +241,86 @@ class WeatherAcquisitionResult:
     warnings: tuple[str, ...] = ()
     history: AcquisitionHistory | None = None
 
-    def require_window(self, target: datetime, maximum_seconds: float) -> None:
+    @property
+    def forecast_id(self) -> str:
+        return digest(
+            {
+                "forecast": json.loads(self.forecast.to_json()),
+                "evidence": [item.receipt_id for item in self.evidence],
+            }
+        )
+
+    @property
+    def diagnostics(self) -> HttpRequestDiagnostics | None:
+        if self.history and self.history.calls:
+            return diagnostics_for_call(self.history.calls[-1])
+        return None
+
+    def evidence_document(self) -> dict[str, object]:
+        """Reference-only neutral envelope; exact bytes remain in the evidence ledger."""
+        history = self.history
+        return {
+            "schema": "ddc-weather-evidence-v1",
+            "forecast_id": self.forecast_id,
+            "forecast": json.loads(self.forecast.to_json()),
+            "evidence_ids": [item.receipt_id for item in self.evidence],
+            "raw_ids": [item.document()["sha256"] for item in self.evidence],
+            "history_id": history.receipt_id if history else None,
+            "package_version": history.package_version if history else None,
+            "code_identity": history.source_code_identity if history else code_identity(),
+            "parser_version": history.parser_version if history else None,
+            "calls": [
+                {
+                    "call_id": call.call_id,
+                    "receipt_id": call.receipt_id,
+                    "diagnostic_id": digest(call.diagnostics_document()),
+                    "attempts": [
+                        {
+                            "attempt_id": attempt.attempt_id,
+                            "receipt_id": digest(attempt.document()),
+                            "exchange_ids": [
+                                exchange.exchange_id for exchange in attempt.exchanges
+                            ],
+                        }
+                        for attempt in call.attempts
+                    ],
+                }
+                for call in history.calls
+            ]
+            if history
+            else [],
+            "warnings": list(self.warnings),
+        }
+
+    def verified_evidence_document(self, ledger: EvidenceLedger) -> dict[str, object]:
+        """Reopen exact acquisition bytes and validate the derived fact before admission."""
+        if self.history is None:
+            raise ValueError("persisted acquisition history required")
+        restored = ledger.read_history(self.history.receipt_id)
+        if (restored != self.history or restored.evidence != self.evidence
+                or restored.normalized_digest != normalized_fingerprint(asdict(self.forecast))):
+            raise ValueError("weather fact/acquisition evidence mismatch")
+        return self.evidence_document()
+
+    def evaluate_window(self, target: datetime, maximum_seconds: float) -> ForecastWindowEvaluation:
         if not math.isfinite(maximum_seconds) or maximum_seconds < 0:
             raise ValueError("forecast window must be finite and nonnegative")
-        if (
-            abs((as_utc(self.forecast.forecast_time) - as_utc(target)).total_seconds())
-            > maximum_seconds
-        ):
-            error = WeatherProviderSchemaError("forecast outside requested selection window")
+        return ForecastWindowEvaluation(
+            self.forecast_id,
+            self.history.receipt_id if self.history else None,
+            as_utc(target),
+            float(maximum_seconds),
+            (as_utc(self.forecast.forecast_time) - as_utc(target)).total_seconds(),
+        )
+
+    def require_window(self, target: datetime, maximum_seconds: float) -> None:
+        evaluation = self.evaluate_window(target, maximum_seconds)
+        if evaluation.reason != "accepted":
+            error = WeatherWindowRejected(evaluation)
             error.raw_payloads = self.raw_payloads
             error.evidence = self.evidence
+            error.history = self.history
+            error.diagnostics = self.diagnostics
             raise error
 
 
