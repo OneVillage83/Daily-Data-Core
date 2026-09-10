@@ -1,5 +1,11 @@
 # Daily Data Core Integration Contracts
 
+Updated: 2026-09-09T22:06:11-07:00 (America/Los_Angeles).
+Candidate 0.2.1.dev1 adds verified `ddc-weather-evidence-v1` and neutral
+`ddc-forecast-window-evaluation-v1`; see
+`TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md`. Consumer rejection retains
+completed acquisition lineage; sport-specific forecast/PIT policy remains in the consumer.
+
 Unreleased v2 acquisition/forecast evolution and migration notes:
 [LOSSLESS_ACQUISITION_V2.md](LOSSLESS_ACQUISITION_V2.md).
 

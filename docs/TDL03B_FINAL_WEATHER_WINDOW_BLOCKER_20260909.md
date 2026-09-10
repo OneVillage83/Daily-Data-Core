@@ -1,5 +1,9 @@
 # TDL-03B final: forecast-window rejection lineage blocker
 
+Continuation (2026-09-09T22:06:11-07:00, America/Los_Angeles): TDL-03E repairs this
+blocker locally; read `TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md` first.
+The failure receipts below remain historical and unchanged.
+
 Updated: 2026-09-09T21:35:21-07:00 (America/Los_Angeles).
 
 **BLOCKED before publication, dependency introduction or production cutover.**

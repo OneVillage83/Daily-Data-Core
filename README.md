@@ -6,6 +6,11 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
+Current continuation (2026-09-09T22:06:11-07:00, America/Los_Angeles): TDL-03E
+locally repairs forecast-rejection lineage; see
+`docs/TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md`. Candidate 0.2.1.dev1
+is unreleased; consumer cutover remains a separate governed job.
+
 - DDC-0 Architecture & ownership contract: **ARCHITECTURE-CERTIFIED**
 - DDC-1 Runtime / provenance / provider / HTTP foundation: **ARCHITECTURE-CERTIFIED**
 - DDC-2 Generic odds + market core: **ARCHITECTURE-CERTIFIED**

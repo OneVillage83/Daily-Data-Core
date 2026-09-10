@@ -2,6 +2,12 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+TDL-03E update: 2026-09-09T22:06:11-07:00 (America/Los_Angeles).
+Forecast-window lineage repair is locally admitted at 0.2.1.dev1: original weather
+gate 13/13 and all prior DDC-6 gates pass. Read
+`TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md` for exact source/artifact and
+delegated certification. No release or consumer cutover; earlier blocker below is historical.
+
 TDL-03B-FINAL update: 2026-09-09T21:35:21-07:00 (America/Los_Angeles).
 **Release/cutover BLOCKED** by the newly executed forecast-window rejection gate.
 DDC correctly rejects an out-of-window forecast and preserves raw evidence, but
