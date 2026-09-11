@@ -6,6 +6,11 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
+Latest, 2026-09-10T18:19:18-07:00 (America/Los_Angeles): final **0.2.2** bytes
+are reproducibly built and locally admitted. Combined TDL-03B-FINAL-A is BLOCKED
+on the production URL-lock sequence and unfrozen consumer activation/rollback
+candidate. Read `docs/TDL03B_FINAL_A_022_PREPARATION_20260910.md`. Unpublished.
+
 Latest: TDL-03F optional-description repair is locally COMPLETE; persisted and
 strict-replay consumer admission PASS. TDL-03B-FINAL resume is READY, not released
 or cut over. Candidate 0.2.2.dev1 and exact evidence:

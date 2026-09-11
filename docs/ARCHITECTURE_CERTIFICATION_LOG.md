@@ -2,6 +2,13 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+2026-09-10T18:19:18-07:00 (America/Los_Angeles): TDL-03F private run 34540868207
+certified the exact 0.2.2.dev1 repair. TDL-03B-FINAL-A now prepares distinct final
+0.2.2 bytes, two byte-identical builds, 144 source/144 installed-wheel tests and
+local consumer admission PASS. This is not final remote or cutover certification;
+the combined checkpoint remains BLOCKED. See
+`TDL03B_FINAL_A_022_PREPARATION_20260910.md` for artifact identity and blockers.
+
 TDL-03F, 2026-09-10: local repair/admission COMPLETE; persisted equivalence and
 strict replay PASS, TDL-03B-FINAL resume READY. This is NOT new remote CI or
 production certification. Exact successor 0.2.2.dev1 evidence and scope are in
