@@ -6,6 +6,14 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
+Latest, 2026-09-10T19:14:49-07:00 (America/Los_Angeles): TDL-03B-FINAL-B
+resolves the prepublication ordering in `docs/PACKAGE_RELEASE_POLICY.md`.
+Stage A certifies exact final artifact bytes and an inactive consumer without a
+public URL; Stage B verifies publication transport and the production lock only
+after separate owner approval. Final 0.2.2 bytes remain unchanged and unpublished.
+Private certification of the new inactive consumer remains required; no cutover.
+The following FINAL-A blocked entry is preserved historical evidence.
+
 Latest, 2026-09-10T18:19:18-07:00 (America/Los_Angeles): final **0.2.2** bytes
 are reproducibly built and locally admitted. Combined TDL-03B-FINAL-A is BLOCKED
 on the production URL-lock sequence and unfrozen consumer activation/rollback

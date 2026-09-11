@@ -1,6 +1,6 @@
 # Daily Data Core Package Release Policy
 
-Date: 2026-08-26
+Last updated: 2026-09-10T18:48:47-07:00 (America/Los_Angeles)
 Status: **GOVERNING**
 
 ## Purpose
@@ -93,7 +93,45 @@ Example temporary local development:
 python -m pip install -e ..\Daily-Data-Core
 ```
 
-Before certification, the sport repo must switch to the released wheel dependency and regenerate its hashed locks.
+Before production activation (Stage B), the sport repo must switch to the released
+wheel dependency and regenerate its hashed locks. Stage A does not require publication.
+
+## Two-stage release certification — TDL-03B-FINAL-B
+
+This explicitly supersedes the prepublication ordering that blocked FINAL-A;
+the original FINAL-A record remains historical evidence. Requiring a released-URL
+lock before certification while forbidding publication before certification was circular.
+
+**Stage A: prepublication artifact certification.** Bind package name, final version,
+wheel filename and SHA-256, exact source SHA/tree, reproducible-build evidence,
+hashed dependency graph, Python/environment constraints, and exact inactive consumer
+SHA/tree in a PREPUBLICATION_RELEASE_BINDING_MANIFEST. Governed private artifact
+delivery is allowed: verify the wheel digest, install the compiled validation lock
+with --require-hashes, and verify installed package bytes/origin. No released URL is
+required. This manifest and validation lock are certification evidence ONLY, never
+production installation/activation authority. The consumer must default to legacy.
+
+**Stage B: postpublication release binding.** Only after successful Stage A and a
+separate owner authorization identifying the exact artifact, publish those certified
+bytes under the canonical release coordinate. Existing source-on-main and tag rules
+still apply; do not rebuild after a merge or retarget the source identity silently.
+Retrieve the canonical URL, verify package/version metadata and exact certified
+SHA-256 BEFORE compiling the released-URL production lock. The production-lock
+commit is separately identified and privately certified. Compare every executable
+dependency name/version/hash, transitive dependency, environment marker and Python
+constraint with Stage A; only the DDC transport-source representation may differ.
+Any unexplained drift blocks cutover. A complete 15-phase admission/rehearsal,
+rollback verification and explicit owner-authorized authority switch remain required.
+
+SHA-256 is immutable byte identity; the URL is a verified distribution location.
+For 0.2.2 the only authorized prepared hash is
+`d18b1d30a343517b85d125c590aec2aace9bee3ab233ce8ba88a28a2c826c0ea`, wheel
+`daily_data_core-0.2.2-py3-none-any.whl`, source
+`e877c852ba98c4742b6f9f5be55ba906eb9c0f38`, tree
+`779960bb4328ed812c24b1e9d70114bd9d7e3f67`.
+If downloaded bytes differ, STOP: do not update the expected hash, silently rebuild,
+overwrite the release, or compile against altered bytes. A new governed identity is
+required. Stage-A success itself authorizes neither publication nor cutover.
 
 ## DDC-6 implication
 Daily-MLB DDC-6 production dependency introduction requires:

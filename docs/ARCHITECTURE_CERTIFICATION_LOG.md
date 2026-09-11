@@ -2,6 +2,16 @@
 
 This file is the authoritative milestone certification record for Daily Data Core. Implementation completion does not equal certification.
 
+2026-09-10T19:14:49-07:00 (America/Los_Angeles): TDL-03B-FINAL-B explicitly
+separates Stage-A prepublication byte/consumer certification from Stage-B published
+URL and production-lock binding. Governing policy is updated; final wheel hash
+`d18b1d30a343517b85d125c590aec2aace9bee3ab233ce8ba88a28a2c826c0ea` and
+source e877c852ba98c4742b6f9f5be55ba906eb9c0f38 are unchanged. Local repeated
+source and isolated installed-wheel suites each passed 144 tests; Ruff and strict
+mypy passed. This records policy/local evidence, NOT a new private certification,
+publication, architecture-source merge, or production activation. FINAL-A below
+remains the historical blocker record; the policy deadlock is now resolved.
+
 2026-09-10T18:19:18-07:00 (America/Los_Angeles): TDL-03F private run 34540868207
 certified the exact 0.2.2.dev1 repair. TDL-03B-FINAL-A now prepares distinct final
 0.2.2 bytes, two byte-identical builds, 144 source/144 installed-wheel tests and
