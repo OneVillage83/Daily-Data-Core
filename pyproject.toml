@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily-data-core"
-version = "0.2.2.dev1"
+version = "0.2.2"
 description = "Shared sport-agnostic data infrastructure for The Daily Line"
 requires-python = ">=3.12,<3.13"
 dependencies = [
