@@ -27,6 +27,20 @@ Work occurs primarily in Daily-NFL. M3 generic raw-store/provider metadata shoul
 ## DDC-8 — Daily-NCAAF integration contract
 Daily-NCAAF begins against DDC from its first implementation milestone. College-football provider identity, conference/team history, rules, features, and models remain local; shared odds/weather/venue/travel and generic provider/provenance infrastructure come from DDC.
 
+## DDC-9 — Line Intelligence Core (future, after current migration contracts)
+Deliverables: append-only multi-source market history; sportsbook/exchange/prediction-market source typing; reusable open/current/consensus/close views; sharp/soft grouping contracts; movement delta/velocity/acceleration primitives; book dispersion; prediction-market divergence; time-to-start normalization; price and line CLV reference contracts; point-in-time market reconstruction helpers.
+
+DDC-9 does **not** implement sport-specific Line Timing Models, the TDL Unified Line, market-residual decision models, EV, or the Recommendation Gate. Those remain in sport repositories.
+
+Exit: any sport consumer can reconstruct the eligible market state at timestamp `T`, compare a sport-owned TDL fair line to opening/current/consensus evidence, and later attach clearly defined closing references for evaluation without leaking future data into the prediction context.
+
+## DDC-10 — Cross-sport forecast-evaluation support contracts (future)
+Deliverables: storage-neutral schemas/keys needed to join immutable sport-owned prediction records to DDC market evidence for evaluation; standardized time-horizon buckets; shared CLV calculation primitives where they are truly sport-agnostic; validation hooks for `available_at` cutoff enforcement and closing-line firewalls.
+
+DDC-10 must not centralize sport model training, ensemble weighting, calibration, specialist discovery, or promotion logic. The goal is reproducible cross-sport evidence plumbing, not a universal model service.
+
+Exit: Daily-MLB, Daily-NFL, Daily-NCAAF, and future sports can produce comparable PIT/CLV evaluation packets while retaining sport-owned model semantics.
+
 ## Certification sequence
 Each DDC milestone requires:
 1. architecture conformance review;
@@ -34,4 +48,5 @@ Each DDC milestone requires:
 3. Ruff;
 4. strict mypy;
 5. small real-provider validation where applicable;
-6. compatibility validation before a sport repository deletes legacy shared code.
+6. compatibility validation before a sport repository deletes legacy shared code;
+7. for DDC-9/DDC-10, explicit point-in-time replay tests proving no closing/future-market leakage.
