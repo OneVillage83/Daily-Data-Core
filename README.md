@@ -63,6 +63,7 @@ DDC owns shared facts and shared acquisition infrastructure. Sport repositories 
 - immutable exact-byte raw evidence and SHA-256 identity;
 - temporal/provenance clocks;
 - sportsbook acquisition and generic market mathematics;
+- full market-history evidence and sport-agnostic Line Intelligence derivations;
 - weather acquisition and normalized meteorological facts;
 - venue/geospatial primitives;
 - travel, timezone-shift, and exact-rest primitives.
@@ -72,12 +73,28 @@ DDC owns shared facts and shared acquisition infrastructure. Sport repositories 
 - sport-specific state/features;
 - sport-specific interpretation of shared facts;
 - model training/inference;
+- Unified Ensemble / TDL Unified Line production;
 - simulation;
+- sport-specific Line Timing Models;
+- market-residual / market-aware decision models;
 - fair-price/value/EV decisions;
 - Recommendation Gate behavior;
 - settlement and sport-specific reporting logic.
 
 Example: DDC can expose wind direction, speed, and a venue reference bearing. Daily-MLB decides whether that means `blowing_out`; Daily-NFL/NCAAF derive their own football-specific field/wind effects.
+
+## Unified forecasting architecture
+
+The cross-sport production target is a **dynamic learned mixture-of-experts** rather than a single universal model. Sport repositories preserve rating, statistical, Bayesian, supervised-ML, simulation, specialist, component-expert, and future model families in a governed registry. Only signal that earns forward point-in-time evidence receives production influence.
+
+The calibrated independent result is the **TDL Unified Line**. Sportsbook, exchange, prediction-market, line-movement, and closing-line evidence are kept out of that independent forecast path and enter only the separately labeled Market Intelligence / Decision layer.
+
+DDC supports that architecture by preserving market timelines, PIT provenance, and evaluation evidence; it does not become the universal sports predictor.
+
+See:
+- `docs/TDL_UNIFIED_FORECASTING_ARCHITECTURE_V1.md`
+- `docs/LINE_INTELLIGENCE_AND_TIMING_V1.md`
+- `docs/MODEL_REGISTRY_EVALUATION_NO_CONTAMINATION_V1.md`
 
 ## Package/release rule
 
@@ -121,6 +138,9 @@ See `docs/DDC_LOCAL_VALIDATION_20260826.md` and `docs/DDC0-DDC5_ARCHITECTURE_CON
 - `docs/ARCHITECTURE.md`
 - `docs/OWNERSHIP_BOUNDARIES.md`
 - `docs/INTEGRATION_CONTRACTS.md`
+- `docs/TDL_UNIFIED_FORECASTING_ARCHITECTURE_V1.md`
+- `docs/LINE_INTELLIGENCE_AND_TIMING_V1.md`
+- `docs/MODEL_REGISTRY_EVALUATION_NO_CONTAMINATION_V1.md`
 - `docs/SOURCE_EXTRACTION_MAP.md`
 - `docs/IMPLEMENTATION_ROADMAP.md`
 - `docs/PACKAGE_RELEASE_POLICY.md`
