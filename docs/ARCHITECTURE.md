@@ -16,6 +16,8 @@ DDC is a library/service boundary, not a universal sports model. It supplies imm
 6. Market snapshots are immutable and book-specific. Consensus/no-vig outputs are derived artifacts, never replacements for raw quotes.
 7. Weather uses forecast snapshots for historical prediction contexts. Actual observed weather is a different evidence family and must never replace an earlier forecast in a PIT feature set.
 8. All timestamps are timezone-aware. Stored canonical timestamps are UTC.
+9. DDC may preserve and derive sport-agnostic market-timeline facts, but the TDL Unified Line, sport-specific Line Timing Models, market-residual models, EV decisions, and Recommendation Gate remain sport/model responsibilities.
+10. Closing-market and result evidence are evaluation-only for any earlier prediction context unless that exact evidence was genuinely `available_at` the prediction cutoff.
 
 ## Layer model
 
@@ -32,6 +34,7 @@ Immutable raw evidence + checksum + provenance clocks
 Provider adapters
     |
     +--> sportsbook market snapshots
+    +--> exchange / prediction-market snapshots
     +--> weather forecast snapshots
     +--> venue/geospatial observations
     +--> travel/geography primitives
@@ -45,6 +48,9 @@ Daily-MLB           Daily-NFL            Daily-NCAAF
 sport identity      sport identity       sport identity
 sport features      sport features       sport features
 models/simulation   models/simulation    models/simulation
+Unified Ensemble    Unified Ensemble     Unified Ensemble
+TDL fair line       TDL fair line        TDL fair line
+sport LTM/decision  sport LTM/decision   sport LTM/decision
 ```
 
 ## Core domains
@@ -58,6 +64,22 @@ Dataset keys are strings rather than a global sport enum. This permits shared ke
 DDC owns odds conversion, hold/no-vig math, quote freshness, normalized bookmaker observations, line-aware grouping, consensus statistics, disagreement measures, and provider adapters for shared sportsbook sources.
 
 DDC does not decide whether an outcome is a good bet, estimate a football/baseball win probability, or reconcile provider participant names to permanent sport identity.
+
+### Line Intelligence
+DDC owns the shared evidence and sport-agnostic derivations required to reconstruct the full market timeline at any prediction cutoff. This includes open/current/consensus state, quote history, movement deltas, movement velocity/acceleration where defined, book dispersion, sharp/soft divergence, source freshness, and exchange/prediction-market evidence when available.
+
+The source of truth remains immutable time-stamped quote evidence. Labels such as `opening`, `current`, `consensus`, and `closing` are versioned derived views with explicit source-set and cutoff definitions.
+
+DDC does not own sport-specific Line Timing Models. Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport repositories may consume the same normalized market timeline while learning different timing behavior.
+
+### Forecasting support boundary
+DDC is not the TDL model registry, ensemble trainer, calibrator, simulator, or recommendation engine. Those remain sport-owned. However, DDC provides the cross-sport temporal and market-evidence contracts required for those systems to remain point-in-time correct and comparable.
+
+The canonical cross-sport forecasting rules are documented in:
+
+- `TDL_UNIFIED_FORECASTING_ARCHITECTURE_V1.md`;
+- `LINE_INTELLIGENCE_AND_TIMING_V1.md`;
+- `MODEL_REGISTRY_EVALUATION_NO_CONTAMINATION_V1.md`.
 
 ### Weather
 DDC owns NWS/OpenWeather acquisition, normalized forecast values, forecast issue/update times, source comparison, and immutable forecast snapshots.
@@ -79,8 +101,12 @@ Every evidence-backed observation may carry:
 
 All clocks must be timezone-aware. `available_at` may not be later than `observed_at`. A sport feature snapshot at prediction time `T` may consume only observations satisfying `available_at <= T` and any stricter sport-specific cutoff.
 
+A historical prediction run at `T` must behave as though `T` is literally the present. Later injury/lineup/weather/market information, closing lines, final statistics, and outcomes must be inaccessible to that prediction path.
+
 ## Persistence
 V1 uses content-addressed filesystem raw evidence plus normalized contracts that can be persisted by a consuming application. DDC will add its own shared SQLite schema in a later persistence milestone only where central shared storage is operationally required. The contracts are intentionally storage-neutral.
+
+Market history must remain append-only. Repeated numerically identical quotes remain valid evidence because they preserve publication/observation state through time.
 
 ## Versioning
 Public contract changes require semantic versioning. Provider parser versions and provider schema versions are tracked separately from the DDC package version. Breaking contract changes require explicit migration notes for every consuming sport repository.
