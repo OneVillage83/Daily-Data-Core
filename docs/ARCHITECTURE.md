@@ -84,7 +84,7 @@ sport LTM/decision  sport LTM/decision   sport LTM/decision
                                       video/social/etc.
 ```
 
-`Daily-Line-Core` is a peer product layer, not a submodule of DDC. Its architecture is temporarily staged under `docs/daily_line_core/` until the dedicated `OneVillage83/Daily-Line-Core` repository is created.
+`Daily-Line-Core` is a peer product layer, not a submodule of DDC. Its canonical repository is now `OneVillage83/Daily-Line-Core`. The former `docs/daily_line_core/` directory in DDC is historical staging only.
 
 ## Core domains
 
@@ -127,7 +127,7 @@ DLC then owns:
 - cross-sport product ranking views;
 - final sealed `DailyLinePublicationPackage` consumed by report, infographic, website, and automation systems.
 
-The current staged DLC architecture is indexed at `docs/daily_line_core/README.md`.
+Canonical DLC architecture now lives in `OneVillage83/Daily-Line-Core`, beginning with `README.md` and `docs/ARCHITECTURE.md`.
 
 ### Weather
 DDC owns NWS/OpenWeather acquisition, normalized forecast values, forecast issue/update times, source comparison, and immutable forecast snapshots.
