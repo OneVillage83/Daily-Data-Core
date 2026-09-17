@@ -6,35 +6,11 @@ It exists so Daily-MLB, Daily-NFL, Daily-NCAAF, and future sport engines do not 
 
 ## Current status
 
-Latest, 2026-09-10T19:14:49-07:00 (America/Los_Angeles): TDL-03B-FINAL-B
-resolves the prepublication ordering in `docs/PACKAGE_RELEASE_POLICY.md`.
-Stage A certifies exact final artifact bytes and an inactive consumer without a
-public URL; Stage B verifies publication transport and the production lock only
-after separate owner approval. Final 0.2.2 bytes remain unchanged and unpublished.
-Private certification of the new inactive consumer remains required; no cutover.
-The following FINAL-A blocked entry is preserved historical evidence.
+Latest, 2026-09-17 (America/Los_Angeles): the cross-sport product architecture now explicitly includes a planned **Daily-Line-Core (DLC)** peer layer downstream of sealed sport decision packages and DDC market evidence. DLC will own the All Bets Prediction Scanner, EdgeStack Parlay Optimizer, cross-sport product assembly, and sealed `DailyLinePublicationPackage`. This does **not** transfer DLC product logic into DDC; the architecture is temporarily staged under `docs/daily_line_core/` until `OneVillage83/Daily-Line-Core` is created. Repository extraction is tracked in issue #5.
 
-Latest, 2026-09-10T18:19:18-07:00 (America/Los_Angeles): final **0.2.2** bytes
-are reproducibly built and locally admitted. Combined TDL-03B-FINAL-A is BLOCKED
-on the production URL-lock sequence and unfrozen consumer activation/rollback
-candidate. Read `docs/TDL03B_FINAL_A_022_PREPARATION_20260910.md`. Unpublished.
+Latest DDC package/release work, 2026-09-10T19:14:49-07:00 (America/Los_Angeles): TDL-03B-FINAL-B resolves the prepublication ordering in `docs/PACKAGE_RELEASE_POLICY.md`. Stage A certifies exact final artifact bytes and an inactive consumer without a public URL; Stage B verifies publication transport and the production lock only after separate owner approval. Final 0.2.2 bytes remain unchanged and unpublished. Private certification of the new inactive consumer remains required; no cutover.
 
-Latest: TDL-03F optional-description repair is locally COMPLETE; persisted and
-strict-replay consumer admission PASS. TDL-03B-FINAL resume is READY, not released
-or cut over. Candidate 0.2.2.dev1 and exact evidence:
-`docs/TDL03F_OPTIONAL_DESCRIPTION_20260910.md`. Entries below are historical.
-
-TDL-03B-FINAL resume, 2026-09-10T15:02:08-07:00 (America/Los_Angeles): private
-MLB infrastructure certification cleared, but actual persisted odds admission
-exposes a new optional-description outcome-retention difference. Final 0.2.1 is
-prepared and locally package-tested, **not released**. Read
-`docs/TDL03B_FINAL_RESUME_20260910.md`; no consumer cutover is authorized by a
-passing package-only gate. Earlier checkpoint dispositions below are historical.
-
-Current continuation (2026-09-09T22:06:11-07:00, America/Los_Angeles): TDL-03E
-locally repairs forecast-rejection lineage; see
-`docs/TDL03E_FORECAST_WINDOW_LINEAGE_HANDOFF_20260909.md`. Candidate 0.2.1.dev1
-is unreleased; consumer cutover remains a separate governed job.
+Earlier DDC release/migration checkpoints remain documented in the referenced handoff files and certification log.
 
 - DDC-0 Architecture & ownership contract: **ARCHITECTURE-CERTIFIED**
 - DDC-1 Runtime / provenance / provider / HTTP foundation: **ARCHITECTURE-CERTIFIED**
@@ -46,16 +22,11 @@ is unreleased; consumer cutover remains a separate governed job.
 - DDC-7 Daily-NFL migration: planned after DDC-6 compatibility proof
 - DDC-8 Daily-NCAAF integration: planned as the first sport implementation built against certified DDC from day one
 
-The authoritative milestone record is `docs/ARCHITECTURE_CERTIFICATION_LOG.md`.
-
-September 9 follow-up: see `docs/DDC6_RELEASE_ADMISSION_20260909.md` for tested
-v0.1.0 counterexamples, unreleased v0.1.1.dev1 safety fixes, remaining admission
-failures and the exact continuation. Historical certification is not a new
-consumer-equivalence or release claim for this candidate.
+The authoritative DDC milestone record is `docs/ARCHITECTURE_CERTIFICATION_LOG.md`.
 
 ## Ownership rule
 
-DDC owns shared facts and shared acquisition infrastructure. Sport repositories own sport intelligence.
+DDC owns shared facts and shared acquisition infrastructure. Sport repositories own sport intelligence. Daily-Line-Core is a separate downstream cross-sport product layer.
 
 ### DDC owns
 - HTTP transport, retries, diagnostics, and safe URL reporting;
@@ -66,7 +37,8 @@ DDC owns shared facts and shared acquisition infrastructure. Sport repositories 
 - full market-history evidence and sport-agnostic Line Intelligence derivations;
 - weather acquisition and normalized meteorological facts;
 - venue/geospatial primitives;
-- travel, timezone-shift, and exact-rest primitives.
+- travel, timezone-shift, and exact-rest primitives;
+- versioned point-in-time market-evidence handoffs for consumers.
 
 ### Sport repositories retain
 - permanent sport-specific team/player/game identity;
@@ -79,9 +51,22 @@ DDC owns shared facts and shared acquisition infrastructure. Sport repositories 
 - market-residual / market-aware decision models;
 - fair-price/value/EV decisions;
 - Recommendation Gate behavior;
-- settlement and sport-specific reporting logic.
+- settlement and sport-specific reporting logic;
+- sealed sport decision packages for downstream product assembly.
 
-Example: DDC can expose wind direction, speed, and a venue reference bearing. Daily-MLB decides whether that means `blowing_out`; Daily-NFL/NCAAF derive their own football-specific field/wind effects.
+### Daily-Line-Core will own
+- admission of sealed sport decision packages;
+- joining those packages to DDC point-in-time market evidence;
+- the cross-sport **All Bets Prediction Scanner**;
+- the **EdgeStack Parlay Optimizer**;
+- cross-game and cross-sport 2–5 leg combination optimization;
+- final product recommendation/index assembly;
+- immutable `DailyLinePublicationPackage` sealing;
+- handoff contracts to report, infographic, website, and downstream automation consumers.
+
+DLC is a planned peer repository, not a DDC module. The current staging architecture is under `docs/daily_line_core/` only until `OneVillage83/Daily-Line-Core` is physically created.
+
+Example: DDC can expose wind direction, speed, and a venue reference bearing. Daily-MLB decides whether that means `blowing_out`; Daily-NFL/NCAAF derive their own football-specific field/wind effects. Once those sport decisions are sealed, DLC may aggregate them into cross-sport product outputs without reinterpreting the raw weather itself.
 
 ## Unified forecasting architecture
 
@@ -91,10 +76,15 @@ The calibrated independent result is the **TDL Unified Line**. Sportsbook, excha
 
 DDC supports that architecture by preserving market timelines, PIT provenance, and evaluation evidence; it does not become the universal sports predictor.
 
+After individual sports finish prediction/decision and seal their outputs, DLC becomes the cross-sport product assembly layer.
+
 See:
 - `docs/TDL_UNIFIED_FORECASTING_ARCHITECTURE_V1.md`
 - `docs/LINE_INTELLIGENCE_AND_TIMING_V1.md`
 - `docs/MODEL_REGISTRY_EVALUATION_NO_CONTAMINATION_V1.md`
+- `docs/daily_line_core/README.md`
+- `docs/daily_line_core/DLC_ARCHITECTURE_V1.md`
+- `docs/daily_line_core/EDGESTACK_PARLAY_OPTIMIZER_V1.md`
 
 ## Package/release rule
 
@@ -148,7 +138,14 @@ See `docs/DDC_LOCAL_VALIDATION_20260826.md` and `docs/DDC0-DDC5_ARCHITECTURE_CON
 - `docs/DDC0-DDC5_ARCHITECTURE_CONFORMANCE_AUDIT.md`
 - `docs/ARCHITECTURE_CERTIFICATION_LOG.md`
 - `docs/DDC_LOCAL_VALIDATION_20260826.md`
+- `docs/daily_line_core/README.md` — temporary DLC staging index
+- `docs/daily_line_core/DLC_ARCHITECTURE_V1.md` — planned DLC system architecture
+- `docs/daily_line_core/EDGESTACK_PARLAY_OPTIMIZER_V1.md` — planned DLC EdgeStack architecture
+- `docs/daily_line_core/DLC_IMPLEMENTATION_HANDOFF_V1.md` — future Bridge/Codex implementation sequence
+- `docs/daily_line_core/DLC_REPOSITORY_BOOTSTRAP.md` — extraction plan for `OneVillage83/Daily-Line-Core`
 
 ## Consumer migration safety
 
 Daily-MLB's legacy shared implementation remains the regression oracle during DDC-6. DDC-backed adapters may be developed side-by-side, but legacy MLB shared code is not removed until the immutable DDC package release is hash-locked by MLB, fixture equivalence is proven, a tiny real-provider validation passes, artifact/database contracts remain compatible, credential-safety checks pass, and the MLB quality gates remain green.
+
+The DLC architecture addition does not change the current DDC-6 release/cutover status and grants no new production authority.
