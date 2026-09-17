@@ -179,6 +179,6 @@ When replacing a pre-existing sport-local shared implementation:
 5. validate one tiny real-provider path where credentials/provider access are required;
 6. remove duplicate legacy code only after DDC certification and equivalence.
 
-## DLC staging note
+## DLC repository note
 
-The planned DLC architecture is temporarily staged under `docs/daily_line_core/` until `OneVillage83/Daily-Line-Core` is created. The staging location does not transfer DLC product authority into DDC. Repository creation/extraction is tracked in `Daily-Data-Core#5`.
+`OneVillage83/Daily-Line-Core` now exists and is the canonical DLC architecture/product repository. The former `docs/daily_line_core/` directory in DDC is historical staging only. Current DLC contracts, roadmap and resume state are maintained in the DLC repository.
