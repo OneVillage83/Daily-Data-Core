@@ -132,4 +132,4 @@ The future DDC-to-DLC market-evidence handoff must likewise be versioned/immutab
 ## Migration boundary
 A legacy sport-local shared implementation is not removed merely because an equivalent DDC module exists. The consuming sport's current tests/output contract remain authoritative until the DDC-backed path is certified regression-equivalent.
 
-The staged DLC architecture currently lives under `docs/daily_line_core/` only until `OneVillage83/Daily-Line-Core` is physically created and seeded. That staging location does not transfer DLC product authority into DDC.
+`OneVillage83/Daily-Line-Core` now exists and is the canonical DLC architecture/product repository. The former `docs/daily_line_core/` directory in DDC is historical staging only and does not carry current DLC authority.
